@@ -1049,10 +1049,15 @@ var tcLightStyle = document.createElement('style');
 tcLightStyle.textContent = `
 /* ── 17. FORCE DARK → LIGHT INSIDE CARDS ─────────────────────────────────── */
 /* Broad rule: force all children to light text + transparent background.       */
+/* Covers both .tc-card descendants AND .tc-accordion-inner descendants (which  */
+/* use .tc-accordion-item, not .tc-card, as their root).                        */
 /* The restore rules below put known tc- components back to their proper values.*/
 .tc-card *,
 .tc-card *::before,
-.tc-card *::after {
+.tc-card *::after,
+.tc-accordion-inner *,
+.tc-accordion-inner *::before,
+.tc-accordion-inner *::after {
   color:            var(--text)   !important;
   background-color: transparent   !important;
   border-color:     var(--border) !important;
@@ -1701,48 +1706,65 @@ document.head.appendChild(tcLightStyle);
     return (0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3]) < 100;
   }
 
-  // darkifyBgColor: converts any opaque/semi-opaque computed RGB(A) colour string
-  // to a dark-theme equivalent CSS value, or returns null if the colour is
-  // transparent (should be left alone).
+  // normalizeCssColor: asks the browser to resolve any raw CSS colour value
+  // (keyword, hex, rgb(), hsl(), etc.) to its canonical 'rgb(r,g,b)' string.
+  // Returns '' for transparent / unparseable values.
+  var _normDiv = null;
+  function normalizeCssColor(raw) {
+    if (!raw) return '';
+    if (!_normDiv) {
+      _normDiv = document.createElement('div');
+      _normDiv.style.display = 'none';
+      document.body.appendChild(_normDiv);
+    }
+    _normDiv.style.backgroundColor = '';
+    _normDiv.style.backgroundColor = raw;
+    var norm = _normDiv.style.backgroundColor;
+    if (!norm || norm === 'transparent' || norm === 'rgba(0, 0, 0, 0)') return '';
+    return norm;
+  }
+
+  // darkifyBgColor: converts any opaque/semi-opaque computed 'rgb(…)' string
+  // to a dark-theme equivalent CSS value, or returns null for transparent.
   //
-  // Neutral colours (white, grey, black — saturation < 0.20) → var(--surface).
-  // Coloured backgrounds                                       → the original hue
-  //   blended 82% toward --bg (#0f1117), producing a dim dark tint that preserves
-  //   the colour identity without burning the eyes on a dark page.
-  function darkifyBgColor(rawComputed) {
-    // Skip transparent
-    if (rawComputed === 'rgba(0, 0, 0, 0)' || rawComputed === 'transparent') return null;
-    var m = rawComputed.match(/[\d.]+/g);
+  // Neutral colours (white, grey, black — HSV saturation < 0.20) → var(--surface).
+  // Coloured backgrounds → original hue blended 82% toward --bg (#0f1117),
+  //   producing a dim dark tint that keeps colour identity without glowing.
+  function darkifyBgColor(normalized) {
+    if (!normalized) return null;
+    var m = normalized.match(/[\d.]+/g);
     if (!m || m.length < 3) return null;
     var r = +m[0], g = +m[1], b = +m[2];
     var a = m.length >= 4 ? +m[3] : 1;
-    if (a === 0) return null; // fully transparent
+    if (a === 0) return null;
 
-    // Saturation (HSV model, 0–1)
     var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
     var sat = mx === 0 ? 0 : (mx - mn) / mx;
 
     if (sat < 0.20) {
-      // Neutral (white / grey / black) → flat surface colour
+      // Neutral (white / grey / black) → flat dark surface
       return 'var(--surface)';
     }
 
-    // Coloured → blend 82% toward --bg (#0f1117) to keep a dark hue tint
+    // Coloured → blend 82% toward --bg (#0f1117) to keep a dim hue tint
     var dr = Math.round(r * 0.18 + 15 * 0.82);
     var dg = Math.round(g * 0.18 + 17 * 0.82);
     var db = Math.round(b * 0.18 + 23 * 0.82);
     return 'rgb(' + dr + ',' + dg + ',' + db + ')';
   }
 
-  // lightifyCard: walks every element inside a card and rewrites any inline-style
-  // colour to its dark-theme equivalent.  The CSS !important block (section 17)
-  // handles colours that come from stylesheets; this function handles colours
-  // that Schoolbox's own scripts write via el.style.color / el.style.backgroundColor
-  // after the page has already loaded.
+  // darkifyContent: walks every element inside a card or accordion item and
+  // rewrites any inline-style colour to its dark-theme equivalent.
   //
-  // Previously this only handled *dark* inline backgrounds (converting them to
-  // transparent).  It now handles ALL inline background-color values — light,
-  // dark, and coloured — so that no bright box can bleed through the dark theme.
+  // KEY FIX: reads node.style.backgroundColor (the raw inline attribute value)
+  // and normalises it via normalizeCssColor() BEFORE calling darkifyBgColor().
+  // The previous approach read cs.backgroundColor (the *computed* value), which
+  // was already 'transparent' because the CSS !important block had overridden the
+  // inline style — so the function always saw transparent and did nothing.
+  //
+  // The CSS !important block (section 17) handles stylesheet-sourced colours for
+  // .tc-card descendants; this JS handles inline style="" colours (set by
+  // Schoolbox's own scripts) for both .tc-card AND .tc-accordion-item content.
   function lightifyCard(cardEl) {
     cardEl.querySelectorAll('*').forEach(function(node) {
       if (!(node instanceof HTMLElement)) return;
@@ -1753,9 +1775,12 @@ document.head.appendChild(tcLightStyle);
         node.style.setProperty('color', 'var(--text)', 'important');
       }
 
-      // Any inline background-color → dark-theme equivalent
+      // Any inline background-color → dark-theme equivalent.
+      // Read the RAW inline value (node.style.backgroundColor), not the computed
+      // value (cs.backgroundColor) which is already transparent from the CSS rule.
       if (node.style.backgroundColor) {
-        var dark = darkifyBgColor(cs.backgroundColor);
+        var normalized = normalizeCssColor(node.style.backgroundColor);
+        var dark = darkifyBgColor(normalized);
         if (dark) node.style.setProperty('background-color', dark, 'important');
       }
     });
@@ -3405,17 +3430,17 @@ document.head.appendChild(tcLightStyle);
     const page = el('div', { id: 'tc-clean-page' });
     document.body.append(page);
 
-    // Auto-lightify every .tc-card added to the clean page.
+    // Auto-lightify every .tc-card or .tc-accordion-item added to the clean page.
     // Covers both synchronous cards (built immediately in the switch below)
     // and async ones (e.g. due-work slots rebuilt after polling).
     var _lightifyObs = new MutationObserver(function(mutations) {
       mutations.forEach(function(m) {
         m.addedNodes.forEach(function(node) {
           if (!(node instanceof HTMLElement)) return;
-          if (node.classList && node.classList.contains('tc-card')) {
+          if (node.classList && (node.classList.contains('tc-card') || node.classList.contains('tc-accordion-item'))) {
             lightifyCard(node);
           } else if (node.querySelectorAll) {
-            node.querySelectorAll('.tc-card').forEach(lightifyCard);
+            node.querySelectorAll('.tc-card, .tc-accordion-item').forEach(lightifyCard);
           }
         });
       });
