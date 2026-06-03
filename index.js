@@ -3,6 +3,7 @@
 if (window.__TC_ACTIVE__) return;
 
 function injectCleanMode() {
+  if (window.__TC_ACTIVE__) return;
   window.__TC_ACTIVE__ = true;
 
 var style = document.createElement('style');
@@ -3431,19 +3432,14 @@ document.head.appendChild(tcLightStyle);
 }
 
 // ─── IFRAME BOOTSTRAP ─────────────────────────────────────────────────────────
-// When the bookmarklet fires for the first time, we create a full-screen iframe
-// that loads the current portal URL.  On every iframe navigation (full-page OR
-// pushState) the load event re-injects injectCleanMode() into the frame —
-// so the clean UI persists across clicks without needing another bookmarklet run.
-//
-// __TC_FRAME__ is set on the iframe's window before injection so that if the
-// injected script somehow triggers another evaluation of this code it short-
-// circuits immediately instead of creating a nested iframe.
+// If the script runs inside any iframe (detected via window !== window.top),
+// call injectCleanMode() and stop — never create a nested iframe.
+// This is synchronously reliable unlike __TC_FRAME__ which was set async and
+// caused cascading iframes when the script ran before the load event fired.
 
-if (window.__TC_FRAME__) {
-  // We're already inside our managed iframe — just run the UI injection.
+if (window !== window.top) {
   injectCleanMode();
-  return; // stop here; nothing below should run inside the iframe
+  return;
 }
 
 // ── Create the full-screen iframe ───────────────────────────────────────────
@@ -3505,8 +3501,6 @@ function _tcReinject() {
   try {
     var iwin = _tcFrame.contentWindow;
     var idoc = _tcFrame.contentDocument;
-
-    iwin.__TC_FRAME__ = true;
 
     var s = idoc.createElement('script');
 
