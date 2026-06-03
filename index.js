@@ -1701,25 +1701,62 @@ document.head.appendChild(tcLightStyle);
     return (0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3]) < 100;
   }
 
+  // darkifyBgColor: converts any opaque/semi-opaque computed RGB(A) colour string
+  // to a dark-theme equivalent CSS value, or returns null if the colour is
+  // transparent (should be left alone).
+  //
+  // Neutral colours (white, grey, black — saturation < 0.20) → var(--surface).
+  // Coloured backgrounds                                       → the original hue
+  //   blended 82% toward --bg (#0f1117), producing a dim dark tint that preserves
+  //   the colour identity without burning the eyes on a dark page.
+  function darkifyBgColor(rawComputed) {
+    // Skip transparent
+    if (rawComputed === 'rgba(0, 0, 0, 0)' || rawComputed === 'transparent') return null;
+    var m = rawComputed.match(/[\d.]+/g);
+    if (!m || m.length < 3) return null;
+    var r = +m[0], g = +m[1], b = +m[2];
+    var a = m.length >= 4 ? +m[3] : 1;
+    if (a === 0) return null; // fully transparent
+
+    // Saturation (HSV model, 0–1)
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    var sat = mx === 0 ? 0 : (mx - mn) / mx;
+
+    if (sat < 0.20) {
+      // Neutral (white / grey / black) → flat surface colour
+      return 'var(--surface)';
+    }
+
+    // Coloured → blend 82% toward --bg (#0f1117) to keep a dark hue tint
+    var dr = Math.round(r * 0.18 + 15 * 0.82);
+    var dg = Math.round(g * 0.18 + 17 * 0.82);
+    var db = Math.round(b * 0.18 + 23 * 0.82);
+    return 'rgb(' + dr + ',' + dg + ',' + db + ')';
+  }
+
   // lightifyCard: walks every element inside a card and rewrites any inline-style
-  // dark colour to its light equivalent.  The CSS !important block (section 17)
+  // colour to its dark-theme equivalent.  The CSS !important block (section 17)
   // handles colours that come from stylesheets; this function handles colours
   // that Schoolbox's own scripts write via el.style.color / el.style.backgroundColor
   // after the page has already loaded.
+  //
+  // Previously this only handled *dark* inline backgrounds (converting them to
+  // transparent).  It now handles ALL inline background-color values — light,
+  // dark, and coloured — so that no bright box can bleed through the dark theme.
   function lightifyCard(cardEl) {
     cardEl.querySelectorAll('*').forEach(function(node) {
       if (!(node instanceof HTMLElement)) return;
       var cs = window.getComputedStyle(node);
 
-      // Dark inline text  → light text
+      // Dark inline text → light text
       if (node.style.color && isDark(cs.color)) {
         node.style.setProperty('color', 'var(--text)', 'important');
       }
 
-      // Dark/opaque inline background → transparent (card surface colour shows through)
-      var bg = cs.backgroundColor;
-      if (node.style.backgroundColor && isDark(bg) && bg !== 'rgba(0, 0, 0, 0)') {
-        node.style.setProperty('background-color', 'transparent', 'important');
+      // Any inline background-color → dark-theme equivalent
+      if (node.style.backgroundColor) {
+        var dark = darkifyBgColor(cs.backgroundColor);
+        if (dark) node.style.setProperty('background-color', dark, 'important');
       }
     });
   }
