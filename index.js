@@ -1,1 +1,2 @@
-alert("xss")
+alert("xss");
+document.currentScript.remove();
