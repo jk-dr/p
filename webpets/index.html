@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebPet — Static Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      background: #f5f0e8;
+      min-height: 100vh;
+      padding: 48px 32px;
+      color: #222;
+    }
+    h1 { font-size: 2rem; margin-bottom: 8px; }
+    p  { font-size: 0.95rem; color: #555; margin-bottom: 32px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: #fff;
+      border: 1.5px solid #ddd;
+      border-radius: 10px;
+      padding: 16px;
+      font-size: 0.85rem;
+    }
+    .card pre { font-size: 0.78rem; background: #f5f0e8; padding: 8px; border-radius: 6px; overflow: auto; }
+    h2 { font-size: 1rem; margin-bottom: 10px; }
+    code { color: #a85e00; }
+  </style>
+</head>
+<body>
+  <h1>🐾 WebPet</h1>
+  <p>A roaming pixel pet on your page. Hover it. Try the examples below.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Data-attribute (auto-init)</h2>
+      <pre><code>&lt;script
+  src="/webpet.js"
+  data-animal="fox"
+  data-color="red"
+  data-hover-message="hi!"
+&gt;&lt;/script&gt;</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>Programmatic</h2>
+      <pre><code>&lt;script src="/webpet.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  new WebPet({
+    animal: 'dog',
+    color:  'black',
+    scale:  0.6,
+    hoverMessage: 'woof!',
+  });
+&lt;/script&gt;</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>Mouse follower</h2>
+      <pre><code>new WebPet({
+  animal: 'zappy',
+  followMouse: true,
+  scale: 0.6,
+});</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>Multiple pets</h2>
+      <pre><code>new WebPet({ animal: 'snail' });
+new WebPet({ animal: 'crab',
+             hoverMessage:'pinch!' });</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>Horse (paint variant)</h2>
+      <pre><code>new WebPet({
+  animal:   'horse',
+  color:    'paint',
+  subcolor: 'beige',
+});</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>All options</h2>
+      <pre><code>new WebPet({
+  animal:       'fox',
+  color:        'red',
+  scale:        0.5,      // render scale
+  speed:        5.2,      // px / frame
+  followMouse:  false,
+  hoverDist:    50,       // px
+  hoverAction:  'swipe',
+  hoverMessage: 'hi!',
+  position:     'fixed',  // or 'absolute'
+  zIndex:       9999,
+  // override media path:
+  mediaBase: '/media',
+});</code></pre>
+    </div>
+  </div>
+
+  <!-- Live demo pets -->
+  <script src="/webpet.js"></script>
+  <script>
+    new WebPet({ animal: 'fox',  color: 'red',   hoverMessage: 'hover me!' });
+    new WebPet({ animal: 'dog',  color: 'black',  scale: 0.55 });
+    new WebPet({ animal: 'crab', hoverMessage: 'pinch!' });
+  </script>
+</body>
+</html>
