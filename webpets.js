@@ -56,7 +56,7 @@
     }
   };
 
-wp.spawn("fox", "white", {followMouse: true,scale:1});wp.spawn("rat", "gray", {scale:1,speed:5});wp.spawn("dog", "akita", {scale:1,speed:8});wp.spawn("chicken", "brown", {scale:0.7,speed:3});wp.resume();
+wp.spawn("fox", "white", {followMouse: true,scale:1});wp.spawn("rat", "gray", {scale:0.7,speed:10});wp.spawn("rat", "gray", {scale:0.7,speed:10});wp.spawn("rat", "gray", {scale:0.7,speed:10});wp.spawn("rat", "brown", {scale:0.7,speed:10});wp.spawn("rat", "white", {scale:0.7,speed:10});wp.spawn("dog", "akita", {scale:1,speed:8});wp.spawn("chicken", "brown", {scale:0.7,speed:3});wp.resume();
     
   console.log('%c✓ webpet.js loaded','color:#22c55e;font-weight:bold');
   wp.help
