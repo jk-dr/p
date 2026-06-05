@@ -1,5 +1,5 @@
 /**
- * Available animals: 1234
+ * Available animals:
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
  *   turtle, vampire, zappy
@@ -984,7 +984,7 @@
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
     
 
-    if (this._hasRealPointer && distToMouse <= c.hoverDist && s.distractionTargetX !== null) {
+    if (this._hasRealPointer && distToMouse <= c.hoverDist && s.distractionTargetX === null) {
       /* ── Hover state ── */
       // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
