@@ -684,7 +684,17 @@
     // Sync logical position so the pet doesn't teleport when it lands
     s.airX = newLeft;
     s.airY = newTop;
-    // Mouse tracking update
+
+    // Track velocity for fling — mirrors _onMouseMove so touch gets the same EMA
+    var now2 = performance.now();
+    var dt2  = now2 - (this._lastMoveTime || now2);
+    if (dt2 > 0 && dt2 < 100) {
+      var rawVX2 = (p.clientX - this._mouseX) / dt2;
+      var rawVY2 = (p.clientY - this._mouseY) / dt2;
+      this._mouseVX = this._mouseVX == null ? rawVX2 : this._mouseVX * 0.6 + rawVX2 * 0.4;
+      this._mouseVY = this._mouseVY == null ? rawVY2 : this._mouseVY * 0.6 + rawVY2 * 0.4;
+    }
+    this._lastMoveTime = now2;
     this._mouseX = p.clientX;
     this._mouseY = p.clientY;
   };
