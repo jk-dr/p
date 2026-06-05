@@ -1,5 +1,5 @@
 /**
- * Available animals:
+ * Available animals: 1234
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
  *   turtle, vampire, zappy
@@ -1005,15 +1005,6 @@
         s.distractionUntil   = ts + 1000 + Math.random() * 2000;
         this._pickMovementAction();
       }
-    } else if (distToMouse > c.hoverDist) {
-      if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
-        var hMargin = 16;
-        var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
-        var hDir    = Math.random() < 0.5 ? -1 : 1;
-        s.distractionTargetX = Math.min(Math.max(hMargin, x + hDir * hDist), parentW - hMargin);
-        s.distractionUntil   = ts + 1000 + Math.random() * 2000;
-        this._pickMovementAction();
-      }
     }
     else {
       this._showBubble(false);
@@ -1096,6 +1087,15 @@
         this._applyTransforms(wobbleRot);
       }
     }
+
+    if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
+        var hMargin = 16;
+        var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
+        var hDir    = Math.random() < 0.5 ? -1 : 1;
+        s.distractionTargetX = Math.min(Math.max(hMargin, x + hDir * hDist), parentW - hMargin);
+        s.distractionUntil   = ts + 1000 + Math.random() * 2000;
+        this._pickMovementAction();
+      }
 
     this._wrapEl.style.left = (x - spriteW / 2) + 'px';
     this._rafId = requestAnimationFrame(this._tick);
