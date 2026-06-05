@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets new
+ * webpet.js — Standalone, zero-dependency web pets 
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -735,8 +735,8 @@
       return;
     }
 
-    var SCALE = 0.4 * 16.67;
-    var MAX_V = 25;
+    var SCALE = 1.2 * 16.67;
+    var MAX_V = 40;
 
     // Heavier (larger) pets are harder to fling — weight scales with rendered area.
     // Base is scale=0.5 (50×50px). A pet at scale=1.0 has 4× the area → half the velocity.
