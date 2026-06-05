@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets new
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -737,10 +737,18 @@
 
     var SCALE = 0.4 * 16.67;
     var MAX_V = 25;
+
+    // Heavier (larger) pets are harder to fling — weight scales with rendered area.
+    // Base is scale=0.5 (50×50px). A pet at scale=1.0 has 4× the area → half the velocity.
+    var renderedArea  = (c.spriteW * c.scale) * (c.spriteH * c.scale);
+    var baseArea      = (c.spriteW * 0.5)     * (c.spriteH * 0.5);
+    var weightFactor  = Math.sqrt(renderedArea / baseArea); // sqrt keeps it from being too punishing
+    var effectiveScale = SCALE / weightFactor;
+
     var velPxMsX = (this._mouseVX != null && isFinite(this._mouseVX)) ? this._mouseVX : 0;
     var velPxMsY = (this._mouseVY != null && isFinite(this._mouseVY)) ? this._mouseVY : 0;
-    var velX = Math.max(-MAX_V, Math.min(velPxMsX * SCALE, MAX_V));
-    var velY = Math.max(-MAX_V, Math.min(velPxMsY * SCALE, MAX_V));
+    var velX = Math.max(-MAX_V, Math.min(velPxMsX * effectiveScale, MAX_V));
+    var velY = Math.max(-MAX_V, Math.min(velPxMsY * effectiveScale, MAX_V));
 
     // If already on the floor AND no meaningful throw, just land immediately
     var MIN_BOUNCE_VY = 3.5;
