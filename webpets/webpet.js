@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets new
+ * webpet.js — Standalone, zero-dependency web pets
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -640,7 +640,8 @@
   WebPet.prototype._onDragStart = function (e) {
     // Only primary button for mouse; always fire for touch
     if (e.type === 'mousedown' && e.button !== 0) return;
-    if (e.type === 'touchstart') e.preventDefault(); // prevent scroll while dragging
+    // Prevent text selection, link activation, and scroll during drag
+    e.preventDefault();
 
     var p    = this._pointerCoords(e);
     var rect = this._wrapEl.getBoundingClientRect();
@@ -649,16 +650,21 @@
     s.isDragged     = true;
     s.isFalling     = false;
     s.velY          = 0;
-    // Offset from the pointer to the wrap's top-left corner, so the pet
-    // doesn't snap its top-left corner to the cursor.
     s.dragOffsetX   = rect.left - p.clientX;
     s.dragOffsetY   = rect.top  - p.clientY;
-    // Switch to absolute positioning so we can place it anywhere in the viewport
-    this._wrapEl.style.position   = 'fixed';
-    this._wrapEl.style.bottom     = 'auto';
-    this._wrapEl.style.left       = rect.left + 'px';
-    this._wrapEl.style.top        = rect.top  + 'px';
-    this._wrapEl.style.cursor     = 'grabbing';
+
+    // Block selectstart so dragging over text doesn't highlight it
+    this._onSelectStart = function (e) { e.preventDefault(); };
+    document.addEventListener('selectstart', this._onSelectStart);
+    // Suppress pointer cursor and selection on body
+    this._prevUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+
+    this._wrapEl.style.position = 'fixed';
+    this._wrapEl.style.bottom   = 'auto';
+    this._wrapEl.style.left     = rect.left + 'px';
+    this._wrapEl.style.top      = rect.top  + 'px';
+    this._wrapEl.style.cursor   = 'grabbing';
   };
 
   WebPet.prototype._onDragMove = function (e) {
@@ -711,6 +717,13 @@
 
     s.isDragged = false;
     this._wrapEl.style.cursor = 'grab';
+
+    // Restore selection behaviour
+    if (this._onSelectStart) {
+      document.removeEventListener('selectstart', this._onSelectStart);
+      this._onSelectStart = null;
+    }
+    document.body.style.userSelect = this._prevUserSelect || '';
 
     var rect     = this._wrapEl.getBoundingClientRect();
     var vh       = window.innerHeight;
@@ -1081,6 +1094,11 @@
     document.removeEventListener('mouseup',   this._onDragEnd);
     document.removeEventListener('touchmove', this._onDragMove);
     document.removeEventListener('touchend',  this._onDragEnd);
+    if (this._onSelectStart) {
+      document.removeEventListener('selectstart', this._onSelectStart);
+      this._onSelectStart = null;
+    }
+    document.body.style.userSelect = this._prevUserSelect || '';
     if (this._wrapEl) {
       this._wrapEl.removeEventListener('mousedown',  this._onDragStart);
       this._wrapEl.removeEventListener('touchstart', this._onDragStart);
