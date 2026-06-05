@@ -1,4 +1,4 @@
-f/**
+/**
  * Available animals: tythjyj
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
