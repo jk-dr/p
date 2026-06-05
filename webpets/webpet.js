@@ -249,6 +249,13 @@
    * @param {object}  [options.idlePauseMs] — { min, max } ms between movement segments
    * @param {string[]}[options.movementActions] — Override movement action names
    * @param {string[]}[options.idleActions]     — Override idle action names
+   *
+   * Behaviour modifiers:
+   * @param {boolean|number} [options.jumpy]     — Vertical bounce while moving; true = 8 px amplitude, or pass a px value
+   * @param {boolean|number} [options.wobble]    — Rotation swagger while walking; true = 5°, or pass degrees
+   * @param {number}  [options.flipChance]       — 0–1 probability per step of reversing direction mid-walk (default 0)
+   * @param {boolean} [options.nervous]          — Short erratic targets, higher flip chance, quicker pause cycles
+   * @param {boolean} [options.lazy]             — Very long idle pauses, always picks the slowest movement action
    */
   function WebPet(options) {
     options = options || {};
@@ -305,6 +312,12 @@
       spriteH:       100,
       movementActions: movementActions,
       idleActions:     idleActions,
+      // ── Behaviour modifiers ──────────────────────────────────────────────
+      jumpAmp:    options.jumpy   === true ? 8  : (options.jumpy   != null ? +options.jumpy   : 0),
+      wobbleDeg:  options.wobble  === true ? 5  : (options.wobble  != null ? +options.wobble  : 0),
+      flipChance: options.flipChance != null ? +options.flipChance : (options.nervous ? 0.15 : 0),
+      nervous:    !!options.nervous,
+      lazy:       !!options.lazy,
     };
 
     this._state = {
@@ -320,6 +333,8 @@
       lastStepTime:           0,
       lastGif:                null,
       isHovered:              false,
+      jumpPhase:              0,
+      wobblePhase:            0,
     };
 
     this._mouseX = 0;
@@ -374,7 +389,17 @@
   };
 
   WebPet.prototype._applyFacing = function () {
-    this._spriteEl.style.transform = 'scaleX(' + this._state.facingDir + ')';
+    this._applyTransforms(0);
+  };
+
+  /**
+   * Set sprite facing + optional rotation (wobble).
+   * Keeps scaleX and rotate in a single transform so they compose correctly.
+   */
+  WebPet.prototype._applyTransforms = function (wobbleRot) {
+    var rot = wobbleRot || 0;
+    this._spriteEl.style.transform = 'scaleX(' + this._state.facingDir + ')'
+      + (rot !== 0 ? ' rotate(' + rot + 'deg)' : '');
   };
 
   /* ── DOM construction ────────────────────────────────────────────────── */
@@ -514,19 +539,36 @@
   WebPet.prototype._pickMovementAction = function () {
     var actions = this._cfg.movementActions;
     if (!actions.length) return;
-    var a = actions[Math.floor(Math.random() * actions.length)];
-    this._state.movementAction   = a.name;
+    var pool = actions;
+    // Lazy pets always pick the slowest available action
+    if (this._cfg.lazy) {
+      var slow = actions.filter(function (a) { return a.speedMultiplier <= 1.0; });
+      if (slow.length) pool = slow;
+    }
+    var a = pool[Math.floor(Math.random() * pool.length)];
+    this._state.movementAction    = a.name;
     this._state.movementSpeedMult = a.speedMultiplier;
   };
 
   WebPet.prototype._scheduleMovementPause = function (ts) {
-    var p = this._cfg.idlePauseMs;
-    this._state.movementPauseUntil = ts + p.min + Math.random() * Math.max(0, p.max - p.min);
+    var p    = this._cfg.idlePauseMs;
+    // lazy: very long pauses; nervous: very short pauses (lots of quick dashes)
+    var mult = this._cfg.lazy ? 4.0 : (this._cfg.nervous ? 0.25 : 1.0);
+    this._state.movementPauseUntil = ts + (p.min + Math.random() * Math.max(0, p.max - p.min)) * mult;
   };
 
   WebPet.prototype._pickMovementTarget = function (x, boundsW) {
     var margin  = 16;
     var maxX    = Math.max(margin, boundsW - margin);
+
+    // Nervous pets take short, erratic dashes rather than long walks
+    if (this._cfg.nervous) {
+      var dist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
+      var dir  = Math.random() < 0.5 ? -1 : 1;
+      this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + dir * dist));
+      return;
+    }
+
     var minDist = boundsW * 0.2;
     var maxDist = boundsW * 0.55;
     var dist    = minDist + Math.random() * Math.max(0, maxDist - minDist);
@@ -590,6 +632,9 @@
 
     if (distToMouse <= c.hoverDist) {
       /* ── Hover state ── */
+      // Reset jump / wobble when transitioning to hover
+      if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
+      if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
       this._setGif(c.hoverAction);
       this._applyFacing();
       this._showBubble(true);
@@ -599,6 +644,9 @@
 
       if (idle) {
         /* ── Idle state ── */
+        // Reset jump / wobble when transitioning to idle
+        if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
+        if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
         if (!c.followMouse && s.movementTargetX !== null) {
           s.movementTargetX = null;
           this._scheduleMovementPause(ts);
@@ -611,9 +659,30 @@
 
       } else {
         /* ── Moving state ── */
+
+        // Randomly flip direction mid-walk (flipChance / nervous)
+        if (c.flipChance > 0 && s.movementTargetX !== null && Math.random() < c.flipChance) {
+          var flipped = x - (s.movementTargetX - x);
+          var fMargin = 16;
+          s.movementTargetX = Math.min(Math.max(fMargin, flipped), parentW - fMargin);
+        }
+
         x += (diffX / distX) * c.speed * s.movementSpeedMult;
         x = Math.min(Math.max(16, x), parentW - 16);
         s.x = x;
+
+        // Vertical bounce (jumpy)
+        if (c.jumpAmp > 0) {
+          s.jumpPhase += 0.85;
+          this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * c.jumpAmp) + 'px';
+        }
+
+        // Rotation wobble (wobble)
+        var wobbleRot = 0;
+        if (c.wobbleDeg > 0) {
+          s.wobblePhase += 0.55;
+          wobbleRot = Math.sin(s.wobblePhase) * c.wobbleDeg;
+        }
 
         if (!c.followMouse && s.movementTargetX !== null && distX <= c.idleDist) {
           s.movementTargetX = null;
@@ -626,7 +695,7 @@
         s.idleCooldownUntil = 0;
 
         this._setGif(s.movementAction);
-        this._applyFacing();
+        this._applyTransforms(wobbleRot);
       }
     }
 
@@ -674,6 +743,11 @@
     if (ds.position)     opts.position     = ds.position;
     if (ds.zIndex)       opts.zIndex       = parseInt(ds.zIndex, 10);
     if (ds.mediaBase)    opts.mediaBase    = ds.mediaBase;
+    if (ds.jumpy)        opts.jumpy        = ds.jumpy === 'true' ? true : parseFloat(ds.jumpy);
+    if (ds.wobble)       opts.wobble       = ds.wobble === 'true' ? true : parseFloat(ds.wobble);
+    if (ds.flipChance)   opts.flipChance   = parseFloat(ds.flipChance);
+    if (ds.nervous)      opts.nervous      = ds.nervous === 'true';
+    if (ds.lazy)         opts.lazy         = ds.lazy === 'true';
 
     new WebPet(opts);
   }
