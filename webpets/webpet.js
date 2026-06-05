@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets new new
+ * webpet.js — Standalone, zero-dependency web pets new
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -407,11 +407,13 @@
       airY:                   0,
       // Downward velocity in px per logic step (positive = down)
       velY:                   0,
+      velX:                   0,
     };
 
     this._mouseX = window.innerWidth  / 2;
     this._mouseY = window.innerHeight / 2;
     this._mouseVY      = null;  // px/ms, tracked in _onMouseMove
+    this._mouseVX      = null;  // px/ms, tracked in _onMouseMove
     this._lastMoveTime = null;
     this._rafId  = null;
     this._blobCache = {}; // FIX: initialise blob URL cache to avoid repeated createObjectURL calls
@@ -613,11 +615,10 @@
     var now = performance.now();
     var dt  = now - (this._lastMoveTime || now);
     if (dt > 0 && dt < 100) {
-      // px/ms — smoothed with a simple exponential moving average
       var rawVY = (e.clientY - this._mouseY) / dt;
-      this._mouseVY = this._mouseVY == null
-        ? rawVY
-        : this._mouseVY * 0.6 + rawVY * 0.4;
+      var rawVX = (e.clientX - this._mouseX) / dt;
+      this._mouseVY = this._mouseVY == null ? rawVY : this._mouseVY * 0.6 + rawVY * 0.4;
+      this._mouseVX = this._mouseVX == null ? rawVX : this._mouseVX * 0.6 + rawVX * 0.4;
     }
     this._lastMoveTime = now;
     this._mouseX = e.clientX;
@@ -708,18 +709,20 @@
       return;
     }
 
-    // Use the real-time mouse velocity (px/ms) tracked in _onMouseMove.
-    // Convert to px/frame at 60fps (≈16.67ms per frame) for the RAF-driven physics.
-    // Only carry downward velocity — upward throws aren't intended.
-    var velPxMs  = (this._mouseVY != null && isFinite(this._mouseVY)) ? this._mouseVY : 0;
-    // Scale: feels natural at ~0.4× raw velocity; clamp 0–20 px/frame
-    var velPxFrame = Math.max(0, Math.min(velPxMs * 0.4 * 16.67, 20));
+    // Use real-time mouse velocity (px/ms) tracked in _onMouseMove.
+    // Scale to px/frame at 60fps (≈16.67ms). Cap at ±25 px/frame on each axis.
+    var SCALE = 0.4 * 16.67;
+    var MAX_V = 25;
+    var velPxMsX = (this._mouseVX != null && isFinite(this._mouseVX)) ? this._mouseVX : 0;
+    var velPxMsY = (this._mouseVY != null && isFinite(this._mouseVY)) ? this._mouseVY : 0;
 
     s.isFalling = true;
     s.airX      = rect.left;
     s.airY      = rect.top;
-    s.velY      = velPxFrame;
-    // Reset velocity tracker so stale values don't bleed into next pick-up
+    s.velX      = Math.max(-MAX_V, Math.min(velPxMsX * SCALE, MAX_V));
+    s.velY      = Math.max(-MAX_V, Math.min(velPxMsY * SCALE, MAX_V));
+    // Reset velocity trackers so stale values don't bleed into next pick-up
+    this._mouseVX = null;
     this._mouseVY = null;
   };
 
@@ -734,6 +737,7 @@
 
     s.isFalling = false;
     s.velY      = 0;
+    s.velX      = 0;
     s.airX      = 0;
     s.airY      = 0;
 
@@ -832,14 +836,39 @@
 
     /* ── Falling — runs every RAF frame (60fps) for smooth physics ── */
     if (s.isFalling) {
-      var GRAVITY  = 0.5;   // px/frame² acceleration
-      var MAX_FALL = 20;    // terminal velocity in px/frame
-      var spriteH  = c.spriteH * c.scale;
-      var floorTop = window.innerHeight - spriteH;
+      var GRAVITY   = 0.5;   // px/frame² downward acceleration
+      var MAX_FALL  = 25;    // terminal fall velocity (px/frame)
+      var BOUNCE    = 0.38;  // energy kept on wall/ceiling bounce (0=dead stop, 1=perfect)
+      var spriteW_f = c.spriteW * c.scale;
+      var spriteH_f = c.spriteH * c.scale;
+      var vw_f      = window.innerWidth;
+      var vh_f      = window.innerHeight;
+      var floorTop  = vh_f - spriteH_f;
+      var rightEdge = vw_f - spriteW_f;
 
+      // Apply gravity
       s.velY = Math.min(s.velY + GRAVITY, MAX_FALL);
-      s.airY = s.airY + s.velY;
 
+      // Advance position
+      s.airX += s.velX;
+      s.airY += s.velY;
+
+      // ── Bounce off left / right walls ──
+      if (s.airX <= 0) {
+        s.airX = 0;
+        s.velX = Math.abs(s.velX) * BOUNCE;
+      } else if (s.airX >= rightEdge) {
+        s.airX = rightEdge;
+        s.velX = -Math.abs(s.velX) * BOUNCE;
+      }
+
+      // ── Bounce off ceiling ──
+      if (s.airY <= 0) {
+        s.airY = 0;
+        s.velY = Math.abs(s.velY) * BOUNCE;
+      }
+
+      // ── Land on floor ──
       if (s.airY >= floorTop) {
         s.airY = floorTop;
         this._wrapEl.style.left = s.airX + 'px';
