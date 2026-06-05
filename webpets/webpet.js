@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets newrsljgfnfjo
+ * webpet.js — Standalone, zero-dependency web pets new
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -412,6 +412,7 @@
 
     this._mouseX = window.innerWidth  / 2;
     this._mouseY = window.innerHeight / 2;
+    this._hasRealPointer = false; // set true on first real mousemove/touchmove
     this._mouseVY      = null;  // px/ms, tracked in _onMouseMove
     this._mouseVX      = null;  // px/ms, tracked in _onMouseMove
     this._lastMoveTime = null;
@@ -621,6 +622,7 @@
       this._mouseVX = this._mouseVX == null ? rawVX : this._mouseVX * 0.6 + rawVX * 0.4;
     }
     this._lastMoveTime = now;
+    this._hasRealPointer = true;
     this._mouseX = e.clientX;
     this._mouseY = e.clientY;
   };
@@ -695,6 +697,7 @@
       this._mouseVY = this._mouseVY == null ? rawVY2 : this._mouseVY * 0.6 + rawVY2 * 0.4;
     }
     this._lastMoveTime = now2;
+    this._hasRealPointer = true;
     this._mouseX = p.clientX;
     this._mouseY = p.clientY;
   };
@@ -719,18 +722,25 @@
       return;
     }
 
-    // Use real-time mouse velocity (px/ms) tracked in _onMouseMove.
-    // Scale to px/frame at 60fps (≈16.67ms). Cap at ±25 px/frame on each axis.
     var SCALE = 0.4 * 16.67;
     var MAX_V = 25;
     var velPxMsX = (this._mouseVX != null && isFinite(this._mouseVX)) ? this._mouseVX : 0;
     var velPxMsY = (this._mouseVY != null && isFinite(this._mouseVY)) ? this._mouseVY : 0;
+    var velX = Math.max(-MAX_V, Math.min(velPxMsX * SCALE, MAX_V));
+    var velY = Math.max(-MAX_V, Math.min(velPxMsY * SCALE, MAX_V));
+
+    // If already on the floor AND no meaningful throw, just land immediately
+    var MIN_BOUNCE_VY = 3.5;
+    if (rect.top >= floorTop && Math.abs(velY) < MIN_BOUNCE_VY && Math.abs(velX) < MIN_BOUNCE_VY) {
+      this._landPet(rect.left);
+      return;
+    }
 
     s.isFalling = true;
     s.airX      = rect.left;
-    s.airY      = rect.top;
-    s.velX      = Math.max(-MAX_V, Math.min(velPxMsX * SCALE, MAX_V));
-    s.velY      = Math.max(-MAX_V, Math.min(velPxMsY * SCALE, MAX_V));
+    s.airY      = Math.min(rect.top, floorTop - 1); // ensure at least 1px above floor so bounce triggers
+    s.velX      = velX;
+    s.velY      = velY;
     // Reset velocity trackers so stale values don't bleed into next pick-up
     this._mouseVX = null;
     this._mouseVY = null;
@@ -923,7 +933,7 @@
     var x = s.x;
     var targetX;
 
-    if (c.followMouse) {
+    if (c.followMouse && this._hasRealPointer) {
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
         // Temporarily distracted — wander to a nearby spot, ignore the mouse
         targetX = s.distractionTargetX;
@@ -955,7 +965,7 @@
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
 
-    if (distToMouse <= c.hoverDist) {
+    if (this._hasRealPointer && distToMouse <= c.hoverDist) {
       /* ── Hover state ── */
       // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
@@ -966,7 +976,7 @@
 
       // Pets doing the swipe/hover animation right next to the mouse are easily
       // over-stimulated — boost distraction chance 5× while in hover range.
-      if (c.followMouse && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
+      if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
         var hMargin = 16;
         var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
         var hDir    = Math.random() < 0.5 ? -1 : 1;
@@ -983,9 +993,11 @@
         // Reset jump / wobble when transitioning to idle
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
-        if (!c.followMouse && s.movementTargetX !== null) {
-          s.movementTargetX = null;
-          this._scheduleMovementPause(ts);
+        if (!c.followMouse || !this._hasRealPointer) {
+          if (s.movementTargetX !== null) {
+            s.movementTargetX = null;
+            this._scheduleMovementPause(ts);
+          }
         }
         if (ts > s.idleCooldownUntil && ts > s.idleActionUntil) {
           this._pickIdleAction(ts);
@@ -1007,7 +1019,7 @@
         // In free-roam mode, replaces movementTargetX directly.
         // In followMouse mode, sets a temporary distractionTargetX the pet wanders to before snapping back.
         if (c.distraction > 0 && Math.random() < c.distraction) {
-          if (c.followMouse) {
+          if (c.followMouse && this._hasRealPointer) {
             if (ts >= s.distractionUntil) {
               // Start a new distraction: pick a nearby random spot and a duration of 1–3 s
               var dMargin = 16;
@@ -1040,7 +1052,7 @@
           wobbleRot = Math.sin(s.wobblePhase) * c.wobbleDeg;
         }
 
-        if (!c.followMouse && s.movementTargetX !== null && distX <= c.idleDist) {
+        if ((!c.followMouse || !this._hasRealPointer) && s.movementTargetX !== null && distX <= c.idleDist) {
           s.movementTargetX = null;
           this._scheduleMovementPause(ts);
         }
