@@ -35,6 +35,8 @@
     : '/';
   var _defaultMediaBase = _scriptDir + 'media';
 
+  const CACHE = 'webpets-gifs-v1';
+
   /* ─────────────────────────────────────────────────────────────────────────
      Animal catalog
      Each entry defines defaults for that species.
@@ -333,9 +335,23 @@
 
   /* ── Helpers ─────────────────────────────────────────────────────────── */
 
-  WebPet.prototype._gifUrl = function (action) {
+  WebPet.prototype._gifUrl = async function (action) {
     var c = this._cfg;
-    return c.mediaBase + '/' + c.animal + '/' + c.color + '_' + action + '_8fps.gif';
+    const url = c.mediaBase + '/' + c.animal + '/' + c.color + '_' + action + '_8fps.gif';
+  
+    try {
+      const cache = await caches.open(WEBPETS_CACHE);
+      let response = await cache.match(url);
+  
+      if (!response) {
+        response = await fetch(url, { mode: 'cors' });
+        await cache.put(url, response.clone());
+      }
+  
+      return URL.createObjectURL(await response.blob());
+    } catch (e) {
+      return url; // fallback to direct URL if cache/fetch fails
+    }
   };
 
   WebPet.prototype._setGif = function (action) {
