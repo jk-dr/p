@@ -354,13 +354,19 @@
     }
   };
 
-  WebPet.prototype._setGif = function (action) {
-    var url = this._gifUrl(action);
-    if (this._state.lastGif === url) return;
-    this._state.lastGif = url;
+  WebPet.prototype._setGif = async function (action) {
+    // Compare action string, not the blob URL (which changes every call)
+    if (this._state.lastGif === action) return;
+    this._state.lastGif = action;
+  
+    const url = await this._gifUrl(action);
+  
+    // Guard: action may have changed while we were awaiting the cache/fetch
+    if (this._state.lastGif !== action) return;
+  
     this._spriteEl.style.backgroundImage = 'url("' + url + '")';
   };
-
+  
   WebPet.prototype._applyFacing = function () {
     this._spriteEl.style.transform = 'scaleX(' + this._state.facingDir + ')';
   };
