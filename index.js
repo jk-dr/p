@@ -76,6 +76,7 @@ class Config {
       wp.spawn(animal, color, opts);
     }
 
+    wp.resume();
     console.log('%c✓ webpet.js loaded','color:#22c55e;font-weight:bold');
     wp.help();
     document.querySelector('#webpets')?.closest('li.actions-small-1.status-read')?.remove();
