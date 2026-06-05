@@ -79,7 +79,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Crabs scuttle sideways and like to change direction
-      behaviour: { wobble: 6, flipChance: 0.12, distraction: 0.02 },
+      behaviour: { flipChance: 0.12, distraction: 0.02 },
     },
     deno: {
       speed: 4.8, defaultColor: 'green',
@@ -97,7 +97,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Dogs are enthusiastic — they bound along, wag, and chase squirrels
-      behaviour: { jumpy: 5, wobble: 3, distraction: 0.06 },
+      behaviour: { jumpy: 5, distraction: 0.06 },
     },
     fox: {
       speed: 5.2, defaultColor: 'red',
@@ -127,7 +127,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Mod is a chill moderator — steady, slight swagger
-      behaviour: { wobble: 2, distraction: 0.02 },
+      behaviour: { distraction: 0.02 },
     },
     monkey: {
       speed: 4.7, defaultColor: 'gray',
@@ -137,7 +137,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Monkeys swing around with big bouncy moves and zero attention span
-      behaviour: { jumpy: 7, wobble: 4, flipChance: 0.1, distraction: 0.07 },
+      behaviour: { jumpy: 7, flipChance: 0.1, distraction: 0.07 },
     },
     morph: {
       speed: 4.0, defaultColor: 'purple',
@@ -146,7 +146,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Morph is a shapeshifter — wobbly, unpredictable, and easily distracted
-      behaviour: { wobble: 5, flipChance: 0.1, distraction: 0.05 },
+      behaviour: { flipChance: 0.1, distraction: 0.05 },
     },
     panda: {
       speed: 3.6, defaultColor: 'black',
@@ -174,7 +174,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Rocky is a slow, heavy rock — plods along with a wobble
-      behaviour: { lazy: true, wobble: 2, distraction: 0.01 },
+      behaviour: { lazy: true, distraction: 0.01 },
     },
     'rubber-duck': {
       speed: 3.0, defaultColor: 'yellow',
@@ -193,7 +193,7 @@
       idle: ['idle', 'stand', 'swipe'],
       hover: 'swipe',
       // Skeletons rattle and lurch as they walk
-      behaviour: { wobble: 6, flipChance: 0.06, distraction: 0.04 },
+      behaviour: { flipChance: 0.06, distraction: 0.04 },
     },
     snail: {
       speed: 1.4, defaultColor: 'brown',
@@ -211,7 +211,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Snakes slither with a sinuous wobble and occasional direction change
-      behaviour: { wobble: 5, flipChance: 0.07, distraction: 0.02 },
+      behaviour: { flipChance: 0.07, distraction: 0.02 },
     },
     totoro: {
       speed: 3.1, defaultColor: 'gray',
@@ -239,7 +239,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Vampires are unpredictable — they dart and twist
-      behaviour: { nervous: true, wobble: 3, flipChance: 0.1, distraction: 0.05 },
+      behaviour: { nervous: true, flipChance: 0.1, distraction: 0.05 },
     },
     zappy: {
       speed: 5.0, defaultColor: 'yellow',
