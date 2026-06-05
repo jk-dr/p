@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets new
+ * webpet.js — Standalone, zero-dependency web pets new new
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -396,6 +396,17 @@
       isHovered:              false,
       jumpPhase:              0,
       wobblePhase:            0,
+      // ── Drag / gravity state ──
+      isDragged:              false,
+      isFalling:              false,
+      // Offset from wrap's top-left corner to pointer at drag start (px)
+      dragOffsetX:            0,
+      dragOffsetY:            0,
+      // Pixel position when airborne (from viewport top-left, matching fixed coords)
+      airX:                   0,
+      airY:                   0,
+      // Downward velocity in px per logic step (positive = down)
+      velY:                   0,
     };
 
     this._mouseX = 0;
@@ -403,8 +414,11 @@
     this._rafId  = null;
     this._blobCache = {}; // FIX: initialise blob URL cache to avoid repeated createObjectURL calls
 
-    this._onMouseMove = this._onMouseMove.bind(this);
-    this._tick        = this._tick.bind(this);
+    this._onMouseMove  = this._onMouseMove.bind(this);
+    this._onDragStart  = this._onDragStart.bind(this);
+    this._onDragMove   = this._onDragMove.bind(this);
+    this._onDragEnd    = this._onDragEnd.bind(this);
+    this._tick         = this._tick.bind(this);
 
     this._buildDOM();
     this._start();
@@ -479,9 +493,11 @@
       'width:'      + w + 'px',
       'height:'     + h + 'px',
       'z-index:'    + c.zIndex,
-      'pointer-events:none',
+      'pointer-events:auto',
       'transform-origin:bottom center',
       'overflow:visible',
+      'cursor:grab',
+      'user-select:none',
     ].join(';');
     this._wrapEl = wrap;
 
@@ -497,7 +513,7 @@
       'image-rendering:crisp-edges',
       'transform:scaleX(1)',
       'transform-origin:bottom center',
-      'pointer-events:none',
+      'pointer-events:none',  /* drag is handled by the wrap */
     ].join(';');
     // FIX: removed synchronous _gifUrl() call here — it returned [object Promise]
     // _tick will set the correct GIF within the first animation frame
@@ -578,6 +594,14 @@
 
   WebPet.prototype._start = function () {
     document.addEventListener('mousemove', this._onMouseMove);
+    // Drag listeners on the wrap (mousedown) and document (move/up so drags don't break on fast moves)
+    this._wrapEl.addEventListener('mousedown', this._onDragStart);
+    document.addEventListener('mousemove',  this._onDragMove);
+    document.addEventListener('mouseup',    this._onDragEnd);
+    // Touch support
+    this._wrapEl.addEventListener('touchstart', this._onDragStart, { passive: false });
+    document.addEventListener('touchmove',  this._onDragMove,  { passive: false });
+    document.addEventListener('touchend',   this._onDragEnd);
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       this._rafId = requestAnimationFrame(this._tick);
     }
@@ -586,6 +610,156 @@
   WebPet.prototype._onMouseMove = function (e) {
     this._mouseX = e.clientX;
     this._mouseY = e.clientY;
+  };
+
+  /* ── Drag / pick-up helpers ──────────────────────────────────────────── */
+
+  /** Normalise mouse or first touch to { clientX, clientY }. */
+  WebPet.prototype._pointerCoords = function (e) {
+    if (e.touches && e.touches.length) {
+      return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+    }
+    return { clientX: e.clientX, clientY: e.clientY };
+  };
+
+  WebPet.prototype._onDragStart = function (e) {
+    // Only primary button for mouse; always fire for touch
+    if (e.type === 'mousedown' && e.button !== 0) return;
+    if (e.type === 'touchstart') e.preventDefault(); // prevent scroll while dragging
+
+    var p    = this._pointerCoords(e);
+    var rect = this._wrapEl.getBoundingClientRect();
+    var s    = this._state;
+
+    s.isDragged     = true;
+    s.isFalling     = false;
+    s.velY          = 0;
+    // Offset from the pointer to the wrap's top-left corner, so the pet
+    // doesn't snap its top-left corner to the cursor.
+    s.dragOffsetX   = rect.left - p.clientX;
+    s.dragOffsetY   = rect.top  - p.clientY;
+    // Record the last few pointer Y positions + timestamps for throw velocity
+    this._dragHistory = [{ y: p.clientY, t: Date.now() }];
+
+    // Switch to absolute positioning so we can place it anywhere in the viewport
+    this._wrapEl.style.position   = 'fixed';
+    this._wrapEl.style.bottom     = 'auto';
+    this._wrapEl.style.left       = rect.left + 'px';
+    this._wrapEl.style.top        = rect.top  + 'px';
+    this._wrapEl.style.cursor     = 'grabbing';
+  };
+
+  WebPet.prototype._onDragMove = function (e) {
+    if (!this._state.isDragged) return;
+    if (e.type === 'touchmove') e.preventDefault();
+
+    var p  = this._pointerCoords(e);
+    var s  = this._state;
+    var c  = this._cfg;
+    var w  = c.spriteW * c.scale;
+    var h  = c.spriteH * c.scale;
+
+    var newLeft = p.clientX + s.dragOffsetX;
+    var newTop  = p.clientY + s.dragOffsetY;
+
+    // Clamp to viewport
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    newLeft = Math.max(0, Math.min(newLeft, vw - w));
+    newTop  = Math.max(0, Math.min(newTop,  vh - h));
+
+    this._wrapEl.style.left = newLeft + 'px';
+    this._wrapEl.style.top  = newTop  + 'px';
+
+    // Keep a short history (last 80 ms) for throw velocity
+    var now = Date.now();
+    this._dragHistory.push({ y: p.clientY, t: now });
+    // Trim to last 80 ms
+    this._dragHistory = this._dragHistory.filter(function (pt) { return now - pt.t <= 80; });
+
+    // Sync logical x so the pet doesn't teleport when it lands
+    s.airX = newLeft;
+    s.airY = newTop;
+    // Mouse tracking update
+    this._mouseX = p.clientX;
+    this._mouseY = p.clientY;
+  };
+
+  WebPet.prototype._onDragEnd = function (e) {
+    if (!this._state.isDragged) return;
+
+    var s  = this._state;
+    var c  = this._cfg;
+    var h  = c.spriteH * c.scale;
+
+    s.isDragged = false;
+    this._wrapEl.style.cursor = 'grab';
+
+    var rect = this._wrapEl.getBoundingClientRect();
+    var vh   = window.innerHeight;
+    var floorTop = vh - h; // top coordinate when sitting on the floor
+
+    // If already on the floor, just land immediately
+    if (rect.top >= floorTop) {
+      this._landPet(rect.left);
+      return;
+    }
+
+    // Estimate throw velocity from recent pointer history
+    var history = this._dragHistory || [];
+    var throwVel = 0;
+    if (history.length >= 2) {
+      var oldest = history[0];
+      var newest = history[history.length - 1];
+      var dt = newest.t - oldest.t;
+      if (dt > 0) {
+        // Convert px/ms to px per logic step (STEP_MS = 125 ms)
+        throwVel = ((newest.y - oldest.y) / dt) * 125;
+      }
+    }
+    // Cap throw velocity to something reasonable; negative = upward throw
+    throwVel = Math.max(-30, Math.min(throwVel, 30));
+
+    s.isFalling = true;
+    s.airX      = rect.left;
+    s.airY      = rect.top;
+    // If thrown upward (negative velY) allow it; gravity will reverse it
+    s.velY      = throwVel;
+  };
+
+  /**
+   * Snap the pet back onto the ground after a drop/throw.
+   * @param {number} leftPx — current left offset in fixed coords (px)
+   */
+  WebPet.prototype._landPet = function (leftPx) {
+    var s  = this._state;
+    var c  = this._cfg;
+    var w  = c.spriteW * c.scale;
+
+    s.isFalling = false;
+    s.velY      = 0;
+    s.airX      = 0;
+    s.airY      = 0;
+
+    // Sync logical x (centre of sprite) back to the normal coordinate system
+    var parentEl   = this._wrapEl.parentElement;
+    var parentRect = parentEl
+      ? parentEl.getBoundingClientRect()
+      : { left: 0, width: window.innerWidth };
+    var centreX = leftPx + w / 2 - parentRect.left;
+    centreX = Math.max(16, Math.min(centreX, parentRect.width - 16));
+    s.x = centreX;
+
+    // Restore normal bottom-anchored positioning
+    this._wrapEl.style.position = c.position;
+    this._wrapEl.style.top      = 'auto';
+    this._wrapEl.style.bottom   = '0px';
+    this._wrapEl.style.left     = (centreX - w / 2) + 'px';
+
+    // Clear any stale movement target so the pet doesn't teleport
+    s.movementTargetX = null;
+    s.jumpPhase       = 0;
+    s.wobblePhase     = 0;
   };
 
   WebPet.prototype._pickIdleAction = function (ts) {
@@ -655,6 +829,45 @@
     var s       = this._state;
     var spriteW = c.spriteW * c.scale;
 
+    /* ── 1. If dragged — pet follows cursor; skip all normal logic ── */
+    if (s.isDragged) {
+      // Position is updated in _onDragMove; just keep the GIF playing idle
+      this._setGif(s.idleAction || c.idleActions[0].name);
+      this._applyFacing();
+      this._rafId = requestAnimationFrame(this._tick);
+      return;
+    }
+
+    /* ── 2. If falling — apply gravity, check floor, skip normal logic ── */
+    if (s.isFalling) {
+      var GRAVITY   = 3.2;   // px added to velY each step (downward acceleration)
+      var MAX_FALL  = 40;    // terminal velocity cap (px/step)
+      var spriteH   = c.spriteH * c.scale;
+      var vh        = window.innerHeight;
+      var floorTop  = vh - spriteH;   // top coord when sitting on floor
+
+      s.velY = Math.min(s.velY + GRAVITY, MAX_FALL);
+      s.airY = s.airY + s.velY;
+
+      // Floor collision — clamp and land
+      if (s.airY >= floorTop) {
+        s.airY = floorTop; // prevent clipping past the floor
+        this._wrapEl.style.left = s.airX + 'px';
+        this._wrapEl.style.top  = s.airY + 'px';
+        this._landPet(s.airX);
+        this._rafId = requestAnimationFrame(this._tick);
+        return;
+      }
+
+      // Still airborne — update position
+      this._wrapEl.style.left = s.airX + 'px';
+      this._wrapEl.style.top  = s.airY + 'px';
+      this._setGif(s.idleAction || c.idleActions[0].name);
+      this._applyFacing();
+      this._rafId = requestAnimationFrame(this._tick);
+      return;
+    }
+
     var parentEl    = this._wrapEl.parentElement;
     var parentRect  = parentEl
       ? parentEl.getBoundingClientRect()
@@ -697,8 +910,7 @@
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
 
-    if (!(c.followMouse && ts < s.distractionUntil && s.distractionTargetX !== null) &&
-    distToMouse <= c.hoverDist) {
+    if (distToMouse <= c.hoverDist) {
       /* ── Hover state ── */
       // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
@@ -808,6 +1020,14 @@
   WebPet.prototype.destroy = function () {
     if (this._rafId) cancelAnimationFrame(this._rafId);
     document.removeEventListener('mousemove', this._onMouseMove);
+    document.removeEventListener('mousemove', this._onDragMove);
+    document.removeEventListener('mouseup',   this._onDragEnd);
+    document.removeEventListener('touchmove', this._onDragMove);
+    document.removeEventListener('touchend',  this._onDragEnd);
+    if (this._wrapEl) {
+      this._wrapEl.removeEventListener('mousedown',  this._onDragStart);
+      this._wrapEl.removeEventListener('touchstart', this._onDragStart);
+    }
     if (this._wrapEl && this._wrapEl.parentNode) {
       this._wrapEl.parentNode.removeChild(this._wrapEl);
     }
