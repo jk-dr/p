@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets new
+ * webpet.js — Standalone, zero-dependency web pets new new
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -409,8 +409,8 @@
       velY:                   0,
     };
 
-    this._mouseX = 0;
-    this._mouseY = 0;
+    this._mouseX = window.innerWidth  / 2;
+    this._mouseY = window.innerHeight / 2;
     this._mouseVY      = null;  // px/ms, tracked in _onMouseMove
     this._lastMoveTime = null;
     this._rafId  = null;
