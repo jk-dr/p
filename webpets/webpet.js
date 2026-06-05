@@ -51,6 +51,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Chickens peck around nervously and bob when they move
+      behaviour: { nervous: true, jumpy: 4 },
     },
     clippy: {
       speed: 3.2, defaultColor: 'brown',
@@ -58,6 +60,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Clippy is eager and wiggly
+      behaviour: { wobble: 4, flipChance: 0.05 },
     },
     cockatiel: {
       speed: 4.0, defaultColor: 'brown',
@@ -65,6 +69,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Cockatiels are alert little birds — short bursts, slight hop
+      behaviour: { nervous: true, jumpy: 3 },
     },
     crab: {
       speed: 3.4, defaultColor: 'red',
@@ -72,6 +78,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Crabs scuttle sideways and like to change direction
+      behaviour: { wobble: 6, flipChance: 0.12 },
     },
     deno: {
       speed: 4.8, defaultColor: 'green',
@@ -79,6 +87,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Deno is a speedy dino — bouncy and energetic
+      behaviour: { jumpy: 6 },
     },
     dog: {
       speed: 5.5, defaultColor: 'brown',
@@ -86,6 +96,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Dogs are enthusiastic — they bound along and wag (wobble)
+      behaviour: { jumpy: 5, wobble: 3 },
     },
     fox: {
       speed: 5.2, defaultColor: 'red',
@@ -93,6 +105,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Foxes are cunning — quick direction changes, light prance
+      behaviour: { flipChance: 0.08, jumpy: 3 },
     },
     horse: {
       speed: 5.8, defaultColor: 'brown',
@@ -103,6 +117,8 @@
       hover: 'swipe',
       // paint/socks compound colors: the action becomes "{subcolor}_{action}"
       compoundColors: ['paint', 'socks'],
+      // Horses gallop with a pronounced bounce
+      behaviour: { jumpy: 8 },
     },
     mod: {
       speed: 4.0, defaultColor: 'purple',
@@ -110,6 +126,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Mod is a chill moderator — steady, slight swagger
+      behaviour: { wobble: 2 },
     },
     monkey: {
       speed: 4.7, defaultColor: 'gray',
@@ -118,6 +136,8 @@
       movement: ['walk', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Monkeys swing around with big bouncy moves
+      behaviour: { jumpy: 7, wobble: 4, flipChance: 0.1 },
     },
     morph: {
       speed: 4.0, defaultColor: 'purple',
@@ -125,6 +145,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Morph is a shapeshifter — wobbly and unpredictable
+      behaviour: { wobble: 5, flipChance: 0.1 },
     },
     panda: {
       speed: 3.6, defaultColor: 'black',
@@ -132,6 +154,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Pandas are famously lazy — long rests, slow gait
+      behaviour: { lazy: true },
     },
     rat: {
       speed: 4.9, defaultColor: 'brown',
@@ -139,6 +163,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Rats are skittish — erratic dashes, high flip chance
+      behaviour: { nervous: true, flipChance: 0.18 },
     },
     rocky: {
       speed: 2.8, defaultColor: 'gray',
@@ -147,6 +173,8 @@
       movement: ['walk', 'walk_fast'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Rocky is a slow, heavy rock — plods along with a wobble
+      behaviour: { lazy: true, wobble: 2 },
     },
     'rubber-duck': {
       speed: 3.0, defaultColor: 'yellow',
@@ -154,6 +182,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Rubber ducks bob up and down on water
+      behaviour: { jumpy: 4, wobble: 3 },
     },
     skeleton: {
       speed: 4.4, defaultColor: 'white',
@@ -162,6 +192,8 @@
       movement: ['walk', 'run'],
       idle: ['idle', 'stand', 'swipe'],
       hover: 'swipe',
+      // Skeletons rattle and lurch as they walk
+      behaviour: { wobble: 6, flipChance: 0.06 },
     },
     snail: {
       speed: 1.4, defaultColor: 'brown',
@@ -169,6 +201,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Snails are the definition of lazy
+      behaviour: { lazy: true },
     },
     snake: {
       speed: 3.7, defaultColor: 'green',
@@ -176,6 +210,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Snakes slither with a sinuous wobble and occasional direction change
+      behaviour: { wobble: 5, flipChance: 0.07 },
     },
     totoro: {
       speed: 3.1, defaultColor: 'gray',
@@ -184,6 +220,8 @@
       movement: ['walk', 'run'],
       idle: ['idle', 'lie', 'swipe'],
       hover: 'swipe',
+      // Totoro is a big gentle spirit — slow, slightly bouncy
+      behaviour: { lazy: true, jumpy: 3 },
     },
     turtle: {
       speed: 2.2, defaultColor: 'green',
@@ -191,6 +229,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'lie', 'swipe'],
       hover: 'swipe',
+      // Turtles are slow and steady — lazy, but with a gentle plod
+      behaviour: { lazy: true, wobble: 1 },
     },
     vampire: {
       speed: 4.4, defaultColor: 'converted',
@@ -198,6 +238,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Vampires are unpredictable — they dart and twist
+      behaviour: { nervous: true, wobble: 3, flipChance: 0.1 },
     },
     zappy: {
       speed: 5.0, defaultColor: 'yellow',
@@ -205,6 +247,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
+      // Zappy is electric — bouncy and erratic
+      behaviour: { jumpy: 6, flipChance: 0.08 },
     },
   };
 
@@ -294,6 +338,18 @@
 
     var hoverAction = prefixAction(rawHover);
 
+    // Merge species behaviour defaults under user-supplied options (user wins).
+    var specBeh = spec.behaviour || {};
+    var beh = {
+      jumpy:      options.jumpy      != null ? options.jumpy      : (specBeh.jumpy      != null ? specBeh.jumpy      : false),
+      wobble:     options.wobble     != null ? options.wobble     : (specBeh.wobble     != null ? specBeh.wobble     : false),
+      flipChance: options.flipChance != null ? +options.flipChance : (specBeh.flipChance != null ? specBeh.flipChance : null),
+      nervous:    options.nervous    != null ? !!options.nervous  : (specBeh.nervous    != null ? !!specBeh.nervous  : false),
+      lazy:       options.lazy       != null ? !!options.lazy     : (specBeh.lazy       != null ? !!specBeh.lazy     : false),
+    };
+    // flipChance: if not set by user or species, derive from nervous
+    if (beh.flipChance === null) beh.flipChance = beh.nervous ? 0.15 : 0;
+
     this._cfg = {
       animal:        animalId,
       color:         color,
@@ -312,12 +368,12 @@
       spriteH:       100,
       movementActions: movementActions,
       idleActions:     idleActions,
-      // ── Behaviour modifiers ──────────────────────────────────────────────
-      jumpAmp:    options.jumpy   === true ? 8  : (options.jumpy   != null ? +options.jumpy   : 0),
-      wobbleDeg:  options.wobble  === true ? 5  : (options.wobble  != null ? +options.wobble  : 0),
-      flipChance: options.flipChance != null ? +options.flipChance : (options.nervous ? 0.15 : 0),
-      nervous:    !!options.nervous,
-      lazy:       !!options.lazy,
+      // ── Behaviour modifiers (resolved from species defaults + user options) ──
+      jumpAmp:    beh.jumpy   === true ? 8  : (beh.jumpy   ? +beh.jumpy   : 0),
+      wobbleDeg:  beh.wobble  === true ? 5  : (beh.wobble  ? +beh.wobble  : 0),
+      flipChance: beh.flipChance,
+      nervous:    beh.nervous,
+      lazy:       beh.lazy,
     };
 
     this._state = {
