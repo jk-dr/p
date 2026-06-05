@@ -1,5 +1,5 @@
 /**
- * Available animals:
+ * Available animals:vvvv
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
  *   turtle, vampire, zappy
@@ -951,7 +951,7 @@
     var targetX;
 
     if (c.followMouse && this._hasRealPointer) {
-      console.log(c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null);
+      console.log(c.distraction > 0, ts < s.distractionUntil, s.distractionTargetX !== null);
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
         
         // Temporarily distracted — wander to a nearby spot, ignore the mouse
