@@ -150,7 +150,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Rats are skittish — erratic dashes, high flip chance
-      behaviour: { nervous: true, flipChance: 0.18, distraction: 0.001 },
+      behaviour: { nervous: true, flipChance: 0.18, distraction: 0.08 },
     },
     rocky: {
       speed: 2.8, defaultColor: 'gray',
