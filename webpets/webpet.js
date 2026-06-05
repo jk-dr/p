@@ -35,7 +35,7 @@
     : '/';
   var _defaultMediaBase = _scriptDir + 'media';
 
-  const CACHE = 'webpets-gifs-v1';
+  var CACHE = 'webpets-gifs-v1'; // FIX: was `const`, changed to `var` for consistency; name used correctly throughout
 
   /* ─────────────────────────────────────────────────────────────────────────
      Animal catalog
@@ -325,6 +325,7 @@
     this._mouseX = 0;
     this._mouseY = 0;
     this._rafId  = null;
+    this._blobCache = {}; // FIX: initialise blob URL cache to avoid repeated createObjectURL calls
 
     this._onMouseMove = this._onMouseMove.bind(this);
     this._tick        = this._tick.bind(this);
@@ -337,18 +338,23 @@
 
   WebPet.prototype._gifUrl = async function (action) {
     var c = this._cfg;
-    const url = c.mediaBase + '/' + c.animal + '/' + c.color + '_' + action + '_8fps.gif';
-  
+    var url = c.mediaBase + '/' + c.animal + '/' + c.color + '_' + action + '_8fps.gif';
+
+    // Return already-created blob URL if we have one (avoids repeated createObjectURL)
+    if (this._blobCache[url]) return this._blobCache[url];
+
     try {
-      const cache = await caches.open(WEBPETS_CACHE);
-      let response = await cache.match(url);
-  
+      var cache = await caches.open(CACHE); // FIX: was WEBPETS_CACHE (undefined)
+      var response = await cache.match(url);
+
       if (!response) {
         response = await fetch(url, { mode: 'cors' });
         await cache.put(url, response.clone());
       }
-  
-      return URL.createObjectURL(await response.blob());
+
+      var blobUrl = URL.createObjectURL(await response.blob());
+      this._blobCache[url] = blobUrl;
+      return blobUrl;
     } catch (e) {
       return url; // fallback to direct URL if cache/fetch fails
     }
@@ -358,15 +364,15 @@
     // Compare action string, not the blob URL (which changes every call)
     if (this._state.lastGif === action) return;
     this._state.lastGif = action;
-  
-    const url = await this._gifUrl(action);
-  
+
+    var url = await this._gifUrl(action);
+
     // Guard: action may have changed while we were awaiting the cache/fetch
     if (this._state.lastGif !== action) return;
-  
+
     this._spriteEl.style.backgroundImage = 'url("' + url + '")';
   };
-  
+
   WebPet.prototype._applyFacing = function () {
     this._spriteEl.style.transform = 'scaleX(' + this._state.facingDir + ')';
   };
@@ -407,7 +413,8 @@
       'transform-origin:bottom center',
       'pointer-events:none',
     ].join(';');
-    sprite.style.backgroundImage = 'url("' + this._gifUrl(c.hoverAction) + '")';
+    // FIX: removed synchronous _gifUrl() call here — it returned [object Promise]
+    // _tick will set the correct GIF within the first animation frame
     this._spriteEl = sprite;
     wrap.appendChild(sprite);
 
