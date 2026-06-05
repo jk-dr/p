@@ -1,5 +1,5 @@
 /**
- * Available animals:vvvv
+ * Available animals:
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
  *   turtle, vampire, zappy
@@ -983,6 +983,7 @@
     var cx = wrapRect.left + wrapRect.width  / 2;
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
+    
 
     if (this._hasRealPointer && distToMouse <= c.hoverDist) {
       /* ── Hover state ── */
@@ -995,6 +996,7 @@
 
       // Pets doing the swipe/hover animation right next to the mouse are easily
       // over-stimulated — boost distraction chance 5× while in hover range.
+      
       if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
         var hMargin = 16;
         var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
@@ -1003,8 +1005,17 @@
         s.distractionUntil   = ts + 1000 + Math.random() * 2000;
         this._pickMovementAction();
       }
-
-    } else {
+    } else if (distToMouse > c.hoverDist) {
+      if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
+        var hMargin = 16;
+        var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
+        var hDir    = Math.random() < 0.5 ? -1 : 1;
+        s.distractionTargetX = Math.min(Math.max(hMargin, x + hDir * hDist), parentW - hMargin);
+        s.distractionUntil   = ts + 1000 + Math.random() * 2000;
+        this._pickMovementAction();
+      }
+    }
+    else {
       this._showBubble(false);
 
       if (idle) {
