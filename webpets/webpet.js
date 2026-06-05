@@ -1,4 +1,4 @@
-/**
+f/**
  * Available animals: tythjyj
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
@@ -952,17 +952,21 @@
 
     if (c.followMouse && this._hasRealPointer) {
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
-        console.log(JSON.stringify(c) + "following");
+        console.log("following");
         // Temporarily distracted — wander to a nearby spot, ignore the mouse
         targetX = s.distractionTargetX;
       } else {
+        console.log("distracted");
         s.distractionTargetX = null; // distraction expired, back to mouse
         targetX = this._mouseX - parentRect.left;
       }
     } else if (ts < s.movementPauseUntil) {
+      console.log("other");
       targetX = x;
     } else {
+      console.log("e");
       if (s.movementTargetX === null) {
+        console.log("something else");
         this._pickMovementAction();
         this._pickMovementTarget(x, parentW);
       }
