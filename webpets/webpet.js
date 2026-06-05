@@ -1,18 +1,4 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets 
- *
- * Drop-in usage:
- *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
- *
- * Programmatic usage:
- *   <script src="/webpet.js"></script>
- *   <script>
- *     const pet = new WebPet({ animal: 'fox', color: 'red' });
- *   </script>
- *
- * The script auto-detects where GIF assets live based on its own <script src>.
- * If you need to override: new WebPet({ animal: 'fox', mediaBase: 'https://cdn.example.com/media' });
- *
  * Available animals:
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
@@ -498,7 +484,7 @@
       'width:'      + w + 'px',
       'height:'     + h + 'px',
       'z-index:'    + c.zIndex,
-      'pointer-events:auto',
+      'pointer-events:none',
       'transform-origin:bottom center',
       'overflow:visible',
       'cursor:grab',
