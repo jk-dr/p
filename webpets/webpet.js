@@ -951,7 +951,6 @@
     var targetX;
 
     if (c.followMouse && this._hasRealPointer) {
-      console.log(c.distraction > 0, ts < s.distractionUntil, s.distractionTargetX !== null);
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
         
         // Temporarily distracted — wander to a nearby spot, ignore the mouse
