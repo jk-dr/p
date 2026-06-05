@@ -92,7 +92,8 @@ class Config {
     try {
       const html = await (await fetch('https://portal.tintern.vic.edu.au/eportfolio/1773/6128')).text();
       const doc  = new DOMParser().parseFromString(html, 'text/html');
-      const data = JSON.parse(doc.getElementById('page-anchor-' + window.schoolboxUser.id)?.textContent ?? '{}');
+      const raw  = doc.getElementById('page-anchor-' + window.schoolboxUser.id)?.textContent ?? '{}';
+      const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
       return new Config(data);
     } catch (e) {
       console.warn('[Config] init failed:', e);
