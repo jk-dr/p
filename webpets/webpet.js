@@ -697,7 +697,8 @@
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
 
-    if (distToMouse <= c.hoverDist) {
+    if (!(c.followMouse && ts < s.distractionUntil && s.distractionTargetX !== null) &&
+    distToMouse <= c.hoverDist) {
       /* ── Hover state ── */
       // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
