@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets new
+ * webpet.js — Standalone, zero-dependency web pets newrsljgfnfjo
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -878,12 +878,23 @@
         s.velY = Math.abs(s.velY) * BOUNCE;
       }
 
-      // ── Land on floor ──
+      // ── Floor: bounce or land ──
+      var FLOOR_BOUNCE  = 0.45;  // energy kept on floor bounce
+      var MIN_BOUNCE_VY = 3.5;   // minimum velY (px/frame) needed to bounce
       if (s.airY >= floorTop) {
         s.airY = floorTop;
-        this._wrapEl.style.left = s.airX + 'px';
-        this._wrapEl.style.top  = s.airY + 'px';
-        this._landPet(s.airX);
+        if (s.velY > MIN_BOUNCE_VY) {
+          // Bounce — reflect Y, dampen both axes
+          s.velY = -s.velY * FLOOR_BOUNCE;
+          s.velX =  s.velX * FLOOR_BOUNCE;
+          this._wrapEl.style.left = s.airX + 'px';
+          this._wrapEl.style.top  = s.airY + 'px';
+        } else {
+          // Not enough energy — come to rest
+          this._wrapEl.style.left = s.airX + 'px';
+          this._wrapEl.style.top  = s.airY + 'px';
+          this._landPet(s.airX);
+        }
       } else {
         this._wrapEl.style.left = s.airX + 'px';
         this._wrapEl.style.top  = s.airY + 'px';
