@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets UPDATED
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -300,7 +300,7 @@
    * @param {number}  [options.flipChance]       — 0–1 probability per step of reversing direction mid-walk (default 0)
    * @param {boolean} [options.nervous]          — Short erratic targets, higher flip chance, quicker pause cycles
    * @param {boolean} [options.lazy]             — Very long idle pauses, always picks the slowest movement action
- * @param {number}  [options.distraction]      — 0–1 chance per tick of abandoning the current target and picking a new one
+ * @param {number}  [options.distraction]      — 0–1 chance per tick of abandoning the current target and picking a new one (no-op when followMouse is true)
    */
   function WebPet(options) {
     options = options || {};
@@ -389,6 +389,8 @@
       movementSpeedMult:      1,
       movementPauseUntil:     0,
       movementTargetX:        null,
+      distractionUntil:       0,
+      distractionTargetX:     null,
       lastStepTime:           0,
       lastGif:                null,
       isHovered:              false,
@@ -664,7 +666,13 @@
     var targetX;
 
     if (c.followMouse) {
-      targetX = this._mouseX - parentRect.left;
+      if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
+        // Temporarily distracted — wander to a nearby spot, ignore the mouse
+        targetX = s.distractionTargetX;
+      } else {
+        s.distractionTargetX = null; // distraction expired, back to mouse
+        targetX = this._mouseX - parentRect.left;
+      }
     } else if (ts < s.movementPauseUntil) {
       targetX = x;
     } else {
@@ -726,10 +734,24 @@
           s.movementTargetX = Math.min(Math.max(fMargin, flipped), parentW - fMargin);
         }
 
-        // Distraction — abandon current target and pick a completely new one
-        if (c.distraction > 0 && s.movementTargetX !== null && Math.random() < c.distraction) {
-          this._pickMovementAction();
-          this._pickMovementTarget(x, parentW);
+        // Distraction — abandon current target and pick a completely new one.
+        // In free-roam mode, replaces movementTargetX directly.
+        // In followMouse mode, sets a temporary distractionTargetX the pet wanders to before snapping back.
+        if (c.distraction > 0 && Math.random() < c.distraction) {
+          if (c.followMouse) {
+            if (ts >= s.distractionUntil) {
+              // Start a new distraction: pick a nearby random spot and a duration of 1–3 s
+              var dMargin = 16;
+              var dDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
+              var dDir    = Math.random() < 0.5 ? -1 : 1;
+              s.distractionTargetX = Math.min(Math.max(dMargin, x + dDir * dDist), parentW - dMargin);
+              s.distractionUntil   = ts + 1000 + Math.random() * 2000;
+              this._pickMovementAction();
+            }
+          } else if (s.movementTargetX !== null) {
+            this._pickMovementAction();
+            this._pickMovementTarget(x, parentW);
+          }
         }
 
         x += (diffX / distX) * c.speed * s.movementSpeedMult;
