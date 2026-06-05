@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets UPDATED
+ * webpet.js — Standalone, zero-dependency web pets new
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -705,6 +705,17 @@
       this._setGif(c.hoverAction);
       this._applyFacing();
       this._showBubble(true);
+
+      // Pets doing the swipe/hover animation right next to the mouse are easily
+      // over-stimulated — boost distraction chance 5× while in hover range.
+      if (c.followMouse && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
+        var hMargin = 16;
+        var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
+        var hDir    = Math.random() < 0.5 ? -1 : 1;
+        s.distractionTargetX = Math.min(Math.max(hMargin, x + hDir * hDist), parentW - hMargin);
+        s.distractionUntil   = ts + 1000 + Math.random() * 2000;
+        this._pickMovementAction();
+      }
 
     } else {
       this._showBubble(false);
