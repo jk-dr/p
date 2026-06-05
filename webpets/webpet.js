@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets new new
+ * webpet.js — Standalone, zero-dependency web pets new
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -411,6 +411,8 @@
 
     this._mouseX = 0;
     this._mouseY = 0;
+    this._mouseVY      = null;  // px/ms, tracked in _onMouseMove
+    this._lastMoveTime = null;
     this._rafId  = null;
     this._blobCache = {}; // FIX: initialise blob URL cache to avoid repeated createObjectURL calls
 
@@ -608,6 +610,16 @@
   };
 
   WebPet.prototype._onMouseMove = function (e) {
+    var now = performance.now();
+    var dt  = now - (this._lastMoveTime || now);
+    if (dt > 0 && dt < 100) {
+      // px/ms — smoothed with a simple exponential moving average
+      var rawVY = (e.clientY - this._mouseY) / dt;
+      this._mouseVY = this._mouseVY == null
+        ? rawVY
+        : this._mouseVY * 0.6 + rawVY * 0.4;
+    }
+    this._lastMoveTime = now;
     this._mouseX = e.clientX;
     this._mouseY = e.clientY;
   };
@@ -638,9 +650,6 @@
     // doesn't snap its top-left corner to the cursor.
     s.dragOffsetX   = rect.left - p.clientX;
     s.dragOffsetY   = rect.top  - p.clientY;
-    // Record the last few pointer Y positions + timestamps for throw velocity
-    this._dragHistory = [{ y: p.clientY, t: Date.now() }];
-
     // Switch to absolute positioning so we can place it anywhere in the viewport
     this._wrapEl.style.position   = 'fixed';
     this._wrapEl.style.bottom     = 'auto';
@@ -671,13 +680,7 @@
     this._wrapEl.style.left = newLeft + 'px';
     this._wrapEl.style.top  = newTop  + 'px';
 
-    // Keep a short history (last 80 ms) for throw velocity
-    var now = Date.now();
-    this._dragHistory.push({ y: p.clientY, t: now });
-    // Trim to last 80 ms
-    this._dragHistory = this._dragHistory.filter(function (pt) { return now - pt.t <= 80; });
-
-    // Sync logical x so the pet doesn't teleport when it lands
+    // Sync logical position so the pet doesn't teleport when it lands
     s.airX = newLeft;
     s.airY = newTop;
     // Mouse tracking update
@@ -695,9 +698,9 @@
     s.isDragged = false;
     this._wrapEl.style.cursor = 'grab';
 
-    var rect = this._wrapEl.getBoundingClientRect();
-    var vh   = window.innerHeight;
-    var floorTop = vh - h; // top coordinate when sitting on the floor
+    var rect     = this._wrapEl.getBoundingClientRect();
+    var vh       = window.innerHeight;
+    var floorTop = vh - h;
 
     // If already on the floor, just land immediately
     if (rect.top >= floorTop) {
@@ -705,26 +708,19 @@
       return;
     }
 
-    // Estimate throw velocity from recent pointer history
-    var history = this._dragHistory || [];
-    var throwVel = 0;
-    if (history.length >= 2) {
-      var oldest = history[0];
-      var newest = history[history.length - 1];
-      var dt = newest.t - oldest.t;
-      if (dt > 0) {
-        // Convert px/ms to px per logic step (STEP_MS = 125 ms)
-        throwVel = ((newest.y - oldest.y) / dt) * 125;
-      }
-    }
-    // Cap throw velocity to something reasonable; negative = upward throw
-    throwVel = Math.max(-30, Math.min(throwVel, 30));
+    // Use the real-time mouse velocity (px/ms) tracked in _onMouseMove.
+    // Convert to px/frame at 60fps (≈16.67ms per frame) for the RAF-driven physics.
+    // Only carry downward velocity — upward throws aren't intended.
+    var velPxMs  = (this._mouseVY != null && isFinite(this._mouseVY)) ? this._mouseVY : 0;
+    // Scale: feels natural at ~0.4× raw velocity; clamp 0–20 px/frame
+    var velPxFrame = Math.max(0, Math.min(velPxMs * 0.4 * 16.67, 20));
 
     s.isFalling = true;
     s.airX      = rect.left;
     s.airY      = rect.top;
-    // If thrown upward (negative velY) allow it; gravity will reverse it
-    s.velY      = throwVel;
+    s.velY      = velPxFrame;
+    // Reset velocity tracker so stale values don't bleed into next pick-up
+    this._mouseVY = null;
   };
 
   /**
@@ -819,54 +815,53 @@
 
   WebPet.prototype._tick = function (ts) {
     var STEP_MS = 125; // ~8fps logic steps
-    if (ts - this._state.lastStepTime < STEP_MS) {
-      this._rafId = requestAnimationFrame(this._tick);
-      return;
-    }
-    this._state.lastStepTime = ts;
 
-    var c       = this._cfg;
-    var s       = this._state;
-    var spriteW = c.spriteW * c.scale;
+    var c = this._cfg;
+    var s = this._state;
 
-    /* ── 1. If dragged — pet follows cursor; skip all normal logic ── */
+    /* ── Dragged — position is driven by _onDragMove; nothing to do here ── */
     if (s.isDragged) {
-      // Position is updated in _onDragMove; just keep the GIF playing idle
-      this._setGif(s.idleAction || c.idleActions[0].name);
-      this._applyFacing();
+      if (ts - s.lastStepTime >= STEP_MS) {
+        s.lastStepTime = ts;
+        this._setGif(s.idleAction || c.idleActions[0].name);
+        this._applyFacing();
+      }
       this._rafId = requestAnimationFrame(this._tick);
       return;
     }
 
-    /* ── 2. If falling — apply gravity, check floor, skip normal logic ── */
+    /* ── Falling — runs every RAF frame (60fps) for smooth physics ── */
     if (s.isFalling) {
-      var GRAVITY   = 3.2;   // px added to velY each step (downward acceleration)
-      var MAX_FALL  = 40;    // terminal velocity cap (px/step)
-      var spriteH   = c.spriteH * c.scale;
-      var vh        = window.innerHeight;
-      var floorTop  = vh - spriteH;   // top coord when sitting on floor
+      var GRAVITY  = 0.5;   // px/frame² acceleration
+      var MAX_FALL = 20;    // terminal velocity in px/frame
+      var spriteH  = c.spriteH * c.scale;
+      var floorTop = window.innerHeight - spriteH;
 
       s.velY = Math.min(s.velY + GRAVITY, MAX_FALL);
       s.airY = s.airY + s.velY;
 
-      // Floor collision — clamp and land
       if (s.airY >= floorTop) {
-        s.airY = floorTop; // prevent clipping past the floor
+        s.airY = floorTop;
         this._wrapEl.style.left = s.airX + 'px';
         this._wrapEl.style.top  = s.airY + 'px';
         this._landPet(s.airX);
-        this._rafId = requestAnimationFrame(this._tick);
-        return;
+      } else {
+        this._wrapEl.style.left = s.airX + 'px';
+        this._wrapEl.style.top  = s.airY + 'px';
       }
 
-      // Still airborne — update position
-      this._wrapEl.style.left = s.airX + 'px';
-      this._wrapEl.style.top  = s.airY + 'px';
-      this._setGif(s.idleAction || c.idleActions[0].name);
-      this._applyFacing();
       this._rafId = requestAnimationFrame(this._tick);
       return;
     }
+
+    /* ── Normal movement — throttled to STEP_MS ── */
+    if (ts - s.lastStepTime < STEP_MS) {
+      this._rafId = requestAnimationFrame(this._tick);
+      return;
+    }
+    s.lastStepTime = ts;
+
+    var spriteW = c.spriteW * c.scale;
 
     var parentEl    = this._wrapEl.parentElement;
     var parentRect  = parentEl
