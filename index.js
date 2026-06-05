@@ -4,6 +4,7 @@ class Config {
     if (this.data.profile) this._applyAvatars();
     if (this.data.dynamic_inject) this._dynamic_js();
     if (Array.isArray(this.data.webpets) && this.data.webpets.length) this._initWebpets();
+    console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject);
     this._cleanNotifications();
   }
 
