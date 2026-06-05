@@ -1,5 +1,5 @@
 /**
- * Available animals:
+ * Available animals: SAVED
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
  *   turtle, vampire, zappy
@@ -492,6 +492,16 @@
     ].join(';');
     this._wrapEl = wrap;
 
+    var dragHandle = document.createElement('div');
+    dragHandle.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'pointer-events:auto'
+    ].join(';');
+    
+    wrap.appendChild(dragHandle);
+    this._dragHandle = dragHandle;
+
     // Sprite — background-image driven GIF display
     var sprite = document.createElement('div');
     sprite.style.cssText = [
@@ -586,11 +596,11 @@
   WebPet.prototype._start = function () {
     document.addEventListener('mousemove', this._onMouseMove);
     // Drag listeners on the wrap (mousedown) and document (move/up so drags don't break on fast moves)
-    this._wrapEl.addEventListener('mousedown', this._onDragStart);
+    this._dragHandle.addEventListener('mousedown', this._onDragStart);
     document.addEventListener('mousemove',  this._onDragMove);
     document.addEventListener('mouseup',    this._onDragEnd);
     // Touch support
-    this._wrapEl.addEventListener('touchstart', this._onDragStart, { passive: false });
+    this._dragHandle.addEventListener('touchstart', this._onDragStart, { passive: false });
     document.addEventListener('touchmove',  this._onDragMove,  { passive: false });
     document.addEventListener('touchend',   this._onDragEnd);
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -1093,9 +1103,9 @@
       this._onSelectStart = null;
     }
     document.body.style.userSelect = this._prevUserSelect || '';
-    if (this._wrapEl) {
-      this._wrapEl.removeEventListener('mousedown',  this._onDragStart);
-      this._wrapEl.removeEventListener('touchstart', this._onDragStart);
+    if (this._dragHandle) {
+      this._dragHandle.removeEventListener('mousedown', this._onDragStart);
+      this._dragHandle.removeEventListener('touchstart', this._onDragStart);
     }
     if (this._wrapEl && this._wrapEl.parentNode) {
       this._wrapEl.parentNode.removeChild(this._wrapEl);
