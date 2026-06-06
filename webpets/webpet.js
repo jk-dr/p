@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets a
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -933,23 +933,39 @@
   };
 
   WebPet.prototype._pickMovementTarget = function (x, boundsW) {
-    var margin  = 16;
-    var maxX    = Math.max(margin, boundsW - margin);
+    var margin = 16;
+    var wrapMargin = boundsW * 0.08;
+    var maxX = boundsW + wrapMargin;
 
     // Nervous pets take short, erratic dashes rather than long walks —
     // but still prefer emptier areas when bunching is detected.
     if (this._cfg.nervous) {
+    
+      // 25% chance to intentionally leave the screen
+      if (Math.random() < 0.25) {
+        this._state.movementTargetX =
+          Math.random() < 0.5
+            ? -wrapMargin
+            : boundsW + wrapMargin;
+        return;
+      }
+    
       var spreadT = this._spreadTarget(x, boundsW);
+    
       if (spreadT !== null && Math.random() < 0.6) {
-        // Head toward the spread target but in a short nervous hop
         var nervDir  = spreadT > x ? 1 : -1;
         var nervDist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
-        this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + nervDir * nervDist));
+    
+        this._state.movementTargetX =
+          Math.min(maxX, Math.max(margin, x + nervDir * nervDist));
       } else {
         var dist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
         var dir  = Math.random() < 0.5 ? -1 : 1;
-        this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + dir * dist));
+    
+        this._state.movementTargetX =
+          Math.min(maxX, Math.max(margin, x + dir * dist));
       }
+    
       return;
     }
 
@@ -1058,6 +1074,8 @@
     s.lastStepTime = ts;
 
     var spriteW = c.spriteW * c.scale;
+
+    var WRAP_MARGIN = spriteW * 1.5;
 
     var parentEl    = this._wrapEl.parentElement;
     var parentRect  = parentEl
@@ -1350,7 +1368,14 @@
         }
 
         x += (diffX / distX) * c.speed * s.movementSpeedMult;
-        x = Math.min(Math.max(16, x), parentW - 16);
+
+        // Seamless edge wrapping (only during pathing)
+        if (x < -WRAP_MARGIN) {
+          x = parentW + WRAP_MARGIN;
+        } else if (x > parentW + WRAP_MARGIN) {
+          x = -WRAP_MARGIN;
+        }
+        
         s.x = x;
 
         // Vertical bounce (jumpy)
