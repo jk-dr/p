@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets!
+ * webpet.js — Standalone, zero-dependency web pets !
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -986,18 +986,22 @@
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
 
-    if (this._hasRealPointer && distToMouse <= c.hoverDist && s.distractionTargetX === null) {
-      /* ── Hover state — only when NOT already distracted ── */
-      // Reset jump / wobble when transitioning to hover
+    // isHovering: cursor is close AND (for followMouse pets) not mid-distraction wander
+    var isHovering = this._hasRealPointer && distToMouse <= c.hoverDist
+      && (!c.followMouse || s.distractionTargetX === null);
+
+    this._showBubble(isHovering);
+
+    if (isHovering && c.followMouse) {
+      /* ── Hover state — followMouse pets only ────────────────────────────
+         Free-roaming pets show the hover gif but still run movement below. */
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
       if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
       this._setGif(c.hoverAction);
       this._applyFacing();
-      this._showBubble(true);
 
-      // Boost distraction 10× while in hover range (capped at 0.8) so pets
-      // can get curious/spooked and wander off rather than freezing forever.
-      if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < Math.min(c.distraction * 50, 0.8)) {
+      // Boost distraction 10× (capped at 0.8) so the pet can escape the cursor
+      if (c.distraction > 0 && ts >= s.distractionUntil && Math.random() < Math.min(c.distraction * 50, 0.8)) {
         var hMargin = 16;
         var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
         var hDir    = Math.random() < 0.5 ? -1 : 1;
@@ -1007,11 +1011,11 @@
       }
 
     } else {
-      this._showBubble(false);
+      // Movement / idle logic runs for ALL non-followMouse pets, and for
+      // followMouse pets that are currently distracted (distractionTargetX set).
 
       if (idle) {
         /* ── Idle state ── */
-        // Reset jump / wobble when transitioning to idle
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
         if (!c.followMouse || !this._hasRealPointer) {
@@ -1023,7 +1027,12 @@
         if (ts > s.idleCooldownUntil && ts > s.idleActionUntil) {
           this._pickIdleAction(ts);
         }
-        this._setGif(s.idleAction);
+        // Free-roaming pets near the cursor show the hover gif even while idle
+        if (isHovering) {
+          this._setGif(c.hoverAction);
+        } else {
+          this._setGif(s.idleAction);
+        }
         this._applyFacing();
 
       } else {
@@ -1083,8 +1092,14 @@
         s.idleActionUntil  = 0;
         s.idleCooldownUntil = 0;
 
-        this._setGif(s.movementAction);
-        this._applyTransforms(wobbleRot);
+        // Free-roaming pets near the cursor show the hover gif even while walking
+        if (isHovering) {
+          this._setGif(c.hoverAction);
+          this._applyFacing();
+        } else {
+          this._setGif(s.movementAction);
+          this._applyTransforms(wobbleRot);
+        }
       }
     }
 
