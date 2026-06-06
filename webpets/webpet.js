@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets a
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1189,22 +1189,23 @@
           s.fleeUntil   = 0;
           // fall through to normal movement below
         } else {
-          // Pick a flee target away from the cursor, re-evaluate every 300 ms or when close to reaching it
-          var needsNewFlee = ts >= s.fleeUntil ||
-            (s.fleeTargetX !== null && Math.abs(s.fleeTargetX - x) < 24);
+          // Pick a flee target away from the cursor, re-evaluate when we've reached
+          // the current target OR when the timer expires (longer timer so the pet
+          // commits to running off-screen rather than recalculating mid-way).
+          var needsNewFlee = s.fleeTargetX === null ||
+            (ts >= s.fleeUntil && Math.abs(s.fleeTargetX - x) < 48);
 
           if (needsNewFlee) {
             // Flee direction = opposite of cursor relative to pet centre
             var fleeDir = (cx_f >= this._mouseX) ? 1 : -1;
-            // Lazy pets shuffle a short distance; others bolt further
+            // Lazy pets shuffle a short distance; others bolt far enough to leave the screen
             var fleeDist = c.lazy
               ? FEAR_RADIUS * 0.5 + Math.random() * parentW * 0.1
-              : FEAR_RADIUS * 0.6 + Math.random() * parentW * 0.3;
-            s.fleeTargetX = Math.min(
-              Math.max(FEAR_MARGIN, x + fleeDir * fleeDist),
-              parentW - FEAR_MARGIN
-            );
-            s.fleeUntil = ts + 300 + Math.random() * 200;
+              : parentW * 0.6 + Math.random() * parentW * 0.4;
+            // Allow the flee target to go off-screen so wrapping can fire
+            s.fleeTargetX = x + fleeDir * fleeDist;
+            // Long enough timer that the pet won't recalculate before crossing the edge
+            s.fleeUntil = ts + 1500 + Math.random() * 500;
             // Lazy pets shuffle at walk speed; others always sprint
             if (c.lazy) {
               var walkAction = c.movementActions[0];
@@ -1224,7 +1225,14 @@
           // Lazy pets shuffle at normal pace; others bolt at 1.6×
           var fleeSpeedMult = c.lazy ? 0.9 : 1.6;
           x += (fleeDiffX / fleeDistX) * c.speed * s.movementSpeedMult * fleeSpeedMult;
-          x  = Math.min(Math.max(16, x), parentW - 16);
+          // Apply wrap instead of clamping — same logic as normal pathing
+          if (x < -WRAP_MARGIN) {
+            x += parentW + WRAP_MARGIN * 2;
+            if (s.fleeTargetX !== null) s.fleeTargetX += parentW + WRAP_MARGIN * 2;
+          } else if (x > parentW + WRAP_MARGIN) {
+            x -= parentW + WRAP_MARGIN * 2;
+            if (s.fleeTargetX !== null) s.fleeTargetX -= parentW + WRAP_MARGIN * 2;
+          }
           s.x = x;
           // Only non-lazy pets panic-bounce
           if (!c.lazy) {
@@ -1236,7 +1244,7 @@
           this._setGif(s.movementAction);
           this._applyFacing();
           this._wrapEl.style.left = (x - spriteW / 2) + 'px';
-          this._hideGhost();
+          this._syncGhost(x, x - spriteW / 2, parentW);
           this._rafId = requestAnimationFrame(this._tick);
           return;
         }
@@ -1286,15 +1294,15 @@
           // shrug — fall through to normal movement
         } else {
           // Use dedicated peer-flee state so cursor-fear can't clobber it
-          var peerNeedsNewFlee = s.peerFleeTargetX === null || ts >= s.peerFleeUntil ||
-            Math.abs(s.peerFleeTargetX - x) < 24;
+          var peerNeedsNewFlee = s.peerFleeTargetX === null ||
+            (ts >= s.peerFleeUntil && Math.abs(s.peerFleeTargetX - x) < 48);
 
           if (peerNeedsNewFlee) {
             var peerFleeDir  = (wrapRect.left + wrapRect.width / 2) >= worstThreatX ? 1 : -1;
-            var peerFleeDist = 80 + worstScore * parentW * 0.04;
-            peerFleeDist     = Math.min(peerFleeDist, parentW * 0.45);
-            s.peerFleeTargetX = Math.min(Math.max(20, x + peerFleeDir * peerFleeDist), parentW - 20);
-            s.peerFleeUntil   = ts + 400 + Math.random() * 300;
+            var peerFleeDist = parentW * 0.5 + worstScore * parentW * 0.06;
+            // Allow target off-screen so wrapping fires
+            s.peerFleeTargetX = x + peerFleeDir * peerFleeDist;
+            s.peerFleeUntil   = ts + 1500 + Math.random() * 500;
 
             // Sprint chance scales with size difference
             var sizeDiff3    = worstThreat._cfg.fearSize - mySize;
@@ -1315,7 +1323,14 @@
           if (Math.abs(pFleeDiffX) > 0.5) s.facingDir = pFleeDiffX < 0 ? -1 : 1;
           var pFleeSpeedMult = c.lazy ? 0.9 : 1.4;
           x += (pFleeDiffX / pFleeDistX) * c.speed * s.movementSpeedMult * pFleeSpeedMult;
-          x  = Math.min(Math.max(16, x), parentW - 16);
+          // Apply wrap instead of clamping
+          if (x < -WRAP_MARGIN) {
+            x += parentW + WRAP_MARGIN * 2;
+            if (s.peerFleeTargetX !== null) s.peerFleeTargetX += parentW + WRAP_MARGIN * 2;
+          } else if (x > parentW + WRAP_MARGIN) {
+            x -= parentW + WRAP_MARGIN * 2;
+            if (s.peerFleeTargetX !== null) s.peerFleeTargetX -= parentW + WRAP_MARGIN * 2;
+          }
           s.x = x;
           if (!c.lazy) {
             s.jumpPhase = (s.jumpPhase || 0) + 0.9;
@@ -1326,7 +1341,7 @@
           this._setGif(s.movementAction);
           this._applyFacing();
           this._wrapEl.style.left = (x - spriteW / 2) + 'px';
-          this._hideGhost();
+          this._syncGhost(x, x - spriteW / 2, parentW);
           this._rafId = requestAnimationFrame(this._tick);
           return;
         }
@@ -1397,10 +1412,9 @@
       // Pets doing the swipe/hover animation right next to the mouse are easily
       // over-stimulated — boost distraction chance 5× while in hover range.
       if (followTarget && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
-        var hMargin = 16;
         var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
         var hDir    = Math.random() < 0.5 ? -1 : 1;
-        s.distractionTargetX = Math.min(Math.max(hMargin, x + hDir * hDist), parentW - hMargin);
+        s.distractionTargetX = x + hDir * hDist; // no clamp — wrap handles edges
         s.distractionUntil   = ts + 1000 + Math.random() * 2000;
         this._pickMovementAction();
       }
@@ -1432,8 +1446,7 @@
         // Randomly flip direction mid-walk (flipChance / nervous)
         if (c.flipChance > 0 && s.movementTargetX !== null && Math.random() < c.flipChance) {
           var flipped = x - (s.movementTargetX - x);
-          var fMargin = 16;
-          s.movementTargetX = Math.min(Math.max(fMargin, flipped), parentW - fMargin);
+          s.movementTargetX = flipped; // allow off-screen targets so wrapping can fire
         }
 
         // Distraction — abandon current target and pick a completely new one.
@@ -1443,10 +1456,9 @@
           if (followTarget) {
             if (ts >= s.distractionUntil) {
               // Start a new distraction: pick a nearby random spot and a duration of 1–3 s
-              var dMargin = 16;
               var dDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
               var dDir    = Math.random() < 0.5 ? -1 : 1;
-              s.distractionTargetX = Math.min(Math.max(dMargin, x + dDir * dDist), parentW - dMargin);
+              s.distractionTargetX = x + dDir * dDist; // no clamp — wrap handles edges
               s.distractionUntil   = ts + 1000 + Math.random() * 2000;
               this._pickMovementAction();
             }
