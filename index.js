@@ -11,7 +11,8 @@ class Config {
 
   _applyAvatars() {
     try {
-      const { pfp, chode } = this.data.avatars ?? {};
+      const entry = Object.entries(this.data).find(([k]) => k.trim() === 'avatars');
+      const { pfp, chode } = entry?.[1] ?? {};
       if (pfp) {
         document.querySelector('#profile-drop img').src = pfp;
         document.querySelector('#profile-accordion img').src = pfp;
