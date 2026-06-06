@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets sfhdgt
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1431,6 +1431,7 @@
     this._lastPointerX   = null;
     this._lastPointerY   = null;
     this._rafId          = null;
+    this._blobCache      = {};
     this._prevUserSelect = '';
     this._onSelectStart  = null;
 
@@ -1465,7 +1466,6 @@
     this._wrapEl = wrap;
 
     var img = document.createElement('img');
-    img.src = c.mediaBase + '/ball.png';
     img.style.cssText = [
       'width:100%',
       'height:100%',
@@ -1474,9 +1474,32 @@
       'image-rendering:crisp-edges',
     ].join(';');
     img.draggable = false;
+    this._imgEl = img;
     wrap.appendChild(img);
 
+    // Load via the same fetch/cache/blob pipeline as pet GIFs
+    this._loadImg();
+
     document.body.appendChild(wrap);
+  };
+
+  WebBall.prototype._loadImg = async function () {
+    var c   = this._cfg;
+    var url = c.mediaBase + '/ball.png';
+    if (this._blobCache[url]) { this._imgEl.src = this._blobCache[url]; return; }
+    try {
+      var cache    = await caches.open(CACHE);
+      var response = await cache.match(url);
+      if (!response) {
+        response = await fetch(url, { mode: 'cors' });
+        await cache.put(url, response.clone());
+      }
+      var blobUrl = URL.createObjectURL(await response.blob());
+      this._blobCache[url] = blobUrl;
+      this._imgEl.src = blobUrl;
+    } catch (e) {
+      this._imgEl.src = url; // fallback to direct URL
+    }
   };
 
   WebBall.prototype._start = function () {
