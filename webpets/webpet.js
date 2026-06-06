@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets a
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -936,59 +936,50 @@
     var margin = 16;
     var wrapMargin = boundsW * 0.08;
     var maxX = boundsW + wrapMargin;
-
-    // Nervous pets take short, erratic dashes rather than long walks —
-    // but still prefer emptier areas when bunching is detected.
+    var minX = -wrapMargin;
+  
+    // Any pet can sometimes choose a wrap path.
+    if (Math.random() < 0.25) {
+      this._state.movementTargetX = Math.random() < 0.5 ? minX : maxX;
+      return;
+    }
+  
+    // Nervous pets still do shorter dashes.
     if (this._cfg.nervous) {
-    
-      // 25% chance to intentionally leave the screen
-      if (Math.random() < 0.25) {
-        this._state.movementTargetX =
-          Math.random() < 0.5
-            ? -wrapMargin
-            : boundsW + wrapMargin;
-        return;
-      }
-    
       var spreadT = this._spreadTarget(x, boundsW);
-    
       if (spreadT !== null && Math.random() < 0.6) {
         var nervDir  = spreadT > x ? 1 : -1;
-        var nervDist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
-    
-        this._state.movementTargetX =
-          Math.min(maxX, Math.max(margin, x + nervDir * nervDist));
+        var nervDist  = boundsW * 0.05 + Math.random() * boundsW * 0.12;
+        this._state.movementTargetX = x + nervDir * nervDist;
       } else {
         var dist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
         var dir  = Math.random() < 0.5 ? -1 : 1;
-    
-        this._state.movementTargetX =
-          Math.min(maxX, Math.max(margin, x + dir * dist));
+        this._state.movementTargetX = x + dir * dist;
       }
-    
       return;
     }
-
-    // Spread-aware targeting: 70% of the time try to fill empty space
+  
     var spreadTarget = this._spreadTarget(x, boundsW);
     if (spreadTarget !== null && Math.random() < 0.7) {
       this._state.movementTargetX = spreadTarget;
       return;
     }
-
+  
     var minDist = boundsW * 0.2;
     var maxDist = boundsW * 0.55;
     var dist    = minDist + Math.random() * Math.max(0, maxDist - minDist);
     var avL     = Math.max(0, x - margin);
     var avR     = Math.max(0, maxX - x);
     var dir;
+  
     if (avL >= dist && avR >= dist) dir = Math.random() < 0.5 ? -1 : 1;
     else if (avL >= dist)           dir = -1;
     else if (avR >= dist)           dir = 1;
     else                            dir = avL > avR ? -1 : 1;
-    this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + dir * dist));
+  
+    this._state.movementTargetX = x + dir * dist;
   };
-
+  
   WebPet.prototype._tick = function (ts) {
     var STEP_MS = 125; // ~8fps logic steps
 
