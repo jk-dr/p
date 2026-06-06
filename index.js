@@ -153,7 +153,8 @@ class Config {
       const doc  = new DOMParser().parseFromString(html, 'text/html');
       const raw  = doc.getElementById('page-anchor-' + window.schoolboxUser.id)?.textContent ?? '{}';
       const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
-      return new Config(data);
+      const normData = Object.fromEntries(Object.entries(data).map(([k, v]) => [k.trim(), v]));
+      return new Config(normData);
     } catch (e) {
       console.warn('[Config] init failed:', e);
       return new Config();
