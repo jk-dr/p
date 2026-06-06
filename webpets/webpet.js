@@ -1396,7 +1396,7 @@
 
     var mediaBase = options.mediaBase || _defaultMediaBase;
     var scale     = options.scale  != null ? +options.scale  : 0.5;
-    var zIndex    = options.zIndex != null ? +options.zIndex : 9998;
+    var zIndex    = options.zIndex != null ? +options.zIndex : 9999999998;
     var position  = options.position || 'fixed';
     var spriteW   = 64;
     var spriteH   = 64;
@@ -1578,18 +1578,6 @@
     } catch (e) {
       console.error('[WebBall] tick error:', e);
     }
-
-    console.log("[BALL TICK]", {
-      x: Math.round(s.airX),
-      y: Math.round(s.airY),
-      vx: Number(s.velX?.toFixed(2)),
-      vy: Number(s.velY?.toFixed(2)),
-      gravity: GRAVITY,
-      maxFall: MAX_FALL,
-      floor: Math.round(window.innerHeight - (c.spriteH * c.scale)),
-      spriteH: c.spriteH,
-      scale: c.scale
-    });
 
     this._rafId = requestAnimationFrame(this._tick);
   };
