@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets!
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1425,10 +1425,12 @@
       dragOffsetY: 0,
     };
 
-    this._mouseVX      = null;
-    this._mouseVY      = null;
-    this._lastMoveTime = null;
-    this._rafId        = null;
+    this._mouseVX        = null;
+    this._mouseVY        = null;
+    this._lastMoveTime   = null;
+    this._lastPointerX   = null;
+    this._lastPointerY   = null;
+    this._rafId          = null;
     this._prevUserSelect = '';
     this._onSelectStart  = null;
 
@@ -1463,7 +1465,7 @@
     this._wrapEl = wrap;
 
     var img = document.createElement('img');
-    img.src = c.mediaBase + '/ball.gif';
+    img.src = c.mediaBase + '/ball.png';
     img.style.cssText = [
       'width:100%',
       'height:100%',
@@ -1579,8 +1581,11 @@
     document.body.style.userSelect = 'none';
 
     this._wrapEl.style.cursor = 'grabbing';
-    this._mouseVX = null;
-    this._mouseVY = null;
+    this._mouseVX      = null;
+    this._mouseVY      = null;
+    this._lastPointerX = p.clientX;
+    this._lastPointerY = p.clientY;
+    this._lastMoveTime = performance.now();
   };
 
   WebBall.prototype._onDragMove = function (e) {
@@ -1609,9 +1614,9 @@
 
     var now2 = performance.now();
     var dt2  = now2 - (this._lastMoveTime || now2);
-    if (dt2 > 0 && dt2 < 100) {
-      var rawVX2 = (p.clientX - (s.airX - s.dragOffsetX)) / dt2;
-      var rawVY2 = (p.clientY - (s.airY - s.dragOffsetY)) / dt2;
+    if (dt2 > 0 && dt2 < 100 && this._lastPointerX != null) {
+      var rawVX2 = (p.clientX - this._lastPointerX) / dt2;
+      var rawVY2 = (p.clientY - this._lastPointerY) / dt2;
       this._mouseVX = this._mouseVX == null ? rawVX2 : this._mouseVX * 0.6 + rawVX2 * 0.4;
       this._mouseVY = this._mouseVY == null ? rawVY2 : this._mouseVY * 0.6 + rawVY2 * 0.4;
     }
