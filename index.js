@@ -141,6 +141,10 @@ class Config {
     document.querySelector('#notificationselector_ext')
       ?.closest('li.actions-small-1.status-read')
       ?.remove();
+
+    document.querySelector('#webpets')
+      ?.closest('li.actions-small-1.status-read')
+      ?.remove();
   }
 
   static async init() {
