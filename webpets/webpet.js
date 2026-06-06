@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets ~
+ * webpet.js — Standalone, zero-dependency web pets 
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -52,7 +52,8 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Chickens peck around nervously and bob when they move
-      behaviour: { nervous: true, jumpy: 4, distraction: 0.05 },
+      behaviour: { nervous: true, jumpy: 4, distraction: 0.05, fearOthers: true },
+      fearSize: 2,  // small prey bird
     },
     clippy: {
       speed: 3.2, defaultColor: 'brown',
@@ -62,6 +63,7 @@
       hover: 'swipe',
       // Clippy is eager and wiggly — and constantly distracted
       behaviour: { wobble: 4, flipChance: 0.05, distraction: 0.04 },
+      fearSize: 3,  // office paperclip, mildly intimidating
     },
     cockatiel: {
       speed: 4.0, defaultColor: 'brown',
@@ -70,7 +72,8 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Cockatiels are alert little birds — short bursts, slight hop
-      behaviour: { nervous: true, jumpy: 3, distraction: 0.06 },
+      behaviour: { nervous: true, jumpy: 3, distraction: 0.06, fearOthers: true },
+      fearSize: 2,  // tiny bird
     },
     crab: {
       speed: 3.4, defaultColor: 'red',
@@ -80,6 +83,7 @@
       hover: 'swipe',
       // Crabs scuttle sideways and like to change direction
       behaviour: { flipChance: 0.12, distraction: 0.02 },
+      fearSize: 4,  // claws! reasonably imposing
     },
     deno: {
       speed: 4.8, defaultColor: 'green',
@@ -89,6 +93,7 @@
       hover: 'swipe',
       // Deno is a speedy dino — bouncy and energetic
       behaviour: { jumpy: 6, distraction: 0.02 },
+      fearSize: 9,  // it's a dinosaur
     },
     dog: {
       speed: 5.5, defaultColor: 'brown',
@@ -98,6 +103,7 @@
       hover: 'swipe',
       // Dogs are enthusiastic — they bound along, wag, and chase squirrels
       behaviour: { jumpy: 5, distraction: 0.06 },
+      fearSize: 7,  // big dog, scary to small things
     },
     fox: {
       speed: 5.2, defaultColor: 'red',
@@ -107,6 +113,7 @@
       hover: 'swipe',
       // Foxes are cunning — quick direction changes, light prance
       behaviour: { flipChance: 0.08, jumpy: 3, distraction: 0.03 },
+      fearSize: 6,  // predator
     },
     horse: {
       speed: 5.8, defaultColor: 'brown',
@@ -119,6 +126,7 @@
       compoundColors: ['paint', 'socks'],
       // Horses gallop with a pronounced bounce
       behaviour: { jumpy: 8, distraction: 0.01 },
+      fearSize: 10, // enormous
     },
     mod: {
       speed: 4.0, defaultColor: 'purple',
@@ -128,6 +136,7 @@
       hover: 'swipe',
       // Mod is a chill moderator — steady, slight swagger
       behaviour: { distraction: 0.02 },
+      fearSize: 5,  // authoritative but not physically threatening
     },
     monkey: {
       speed: 4.7, defaultColor: 'gray',
@@ -138,6 +147,7 @@
       hover: 'swipe',
       // Monkeys swing around with big bouncy moves and zero attention span
       behaviour: { jumpy: 7, flipChance: 0.1, distraction: 0.07 },
+      fearSize: 5,  // chaotic but mid-sized
     },
     morph: {
       speed: 4.0, defaultColor: 'purple',
@@ -147,6 +157,7 @@
       hover: 'swipe',
       // Morph is a shapeshifter — wobbly, unpredictable, and easily distracted
       behaviour: { flipChance: 0.1, distraction: 0.05 },
+      fearSize: 4,
     },
     panda: {
       speed: 3.6, defaultColor: 'black',
@@ -156,6 +167,7 @@
       hover: 'swipe',
       // Pandas are famously lazy — long rests, slow gait
       behaviour: { lazy: true, distraction: 0.01 },
+      fearSize: 8,  // big bear, very imposing
     },
     rat: {
       speed: 4.9, defaultColor: 'brown',
@@ -163,8 +175,9 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
-      // Rats are skittish — erratic dashes, high flip chance, and TERRIFIED of the cursor
-      behaviour: { nervous: true, flipChance: 0.18, distraction: 0.08, fearCursor: true },
+      // Rats are skittish — erratic dashes, high flip chance, TERRIFIED of cursor and bigger animals
+      behaviour: { nervous: true, flipChance: 0.18, distraction: 0.08, fearCursor: true, fearOthers: true },
+      fearSize: 1,  // tiny prey — scared of almost everything
     },
     rocky: {
       speed: 2.8, defaultColor: 'gray',
@@ -175,6 +188,7 @@
       hover: 'swipe',
       // Rocky is a slow, heavy rock — plods along with a wobble
       behaviour: { lazy: true, distraction: 0.01 },
+      fearSize: 6,  // it's a rock, intimidating by mass
     },
     'rubber-duck': {
       speed: 3.0, defaultColor: 'yellow',
@@ -184,6 +198,7 @@
       hover: 'swipe',
       // Rubber ducks bob up and down on water, drifting wherever
       behaviour: { jumpy: 4, wobble: 3, distraction: 0.05 },
+      fearSize: 1,  // it's a bath toy
     },
     skeleton: {
       speed: 4.4, defaultColor: 'white',
@@ -194,6 +209,7 @@
       hover: 'swipe',
       // Skeletons rattle and lurch as they walk
       behaviour: { flipChance: 0.06, distraction: 0.04 },
+      fearSize: 7,  // spooky and tall
     },
     snail: {
       speed: 1.4, defaultColor: 'brown',
@@ -203,6 +219,7 @@
       hover: 'swipe',
       // Snails are the definition of lazy
       behaviour: { lazy: true, distraction: 0.01 },
+      fearSize: 1,
     },
     snake: {
       speed: 3.7, defaultColor: 'green',
@@ -212,6 +229,7 @@
       hover: 'swipe',
       // Snakes slither with a sinuous wobble and occasional direction change
       behaviour: { flipChance: 0.07, distraction: 0.02 },
+      fearSize: 5,  // scary to small animals
     },
     totoro: {
       speed: 3.1, defaultColor: 'gray',
@@ -222,6 +240,7 @@
       hover: 'swipe',
       // Totoro is a big gentle spirit — slow, slightly bouncy
       behaviour: { lazy: true, jumpy: 3, distraction: 0.03 },
+      fearSize: 9,  // massive forest spirit
     },
     turtle: {
       speed: 2.2, defaultColor: 'green',
@@ -231,6 +250,7 @@
       hover: 'swipe',
       // Turtles are slow and steady — lazy, but with a gentle plod
       behaviour: { lazy: true, wobble: 1, distraction: 0.01 },
+      fearSize: 3,
     },
     vampire: {
       speed: 4.4, defaultColor: 'converted',
@@ -239,7 +259,8 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Vampires are unpredictable — they dart and twist
-      behaviour: { nervous: true, flipChance: 0.1, distraction: 0.05 },
+      behaviour: { nervous: true, flipChance: 0.1, distraction: 0.05, fearOthers: true },
+      fearSize: 6,  // scary but also scared of bigger things
     },
     zappy: {
       speed: 5.0, defaultColor: 'yellow',
@@ -249,6 +270,7 @@
       hover: 'swipe',
       // Zappy is electric — bouncy, erratic, and scatterbrained
       behaviour: { jumpy: 6, flipChance: 0.08, distraction: 0.06 },
+      fearSize: 3,
     },
   };
 
@@ -382,7 +404,9 @@
       nervous:    beh.nervous,
       lazy:       beh.lazy,
       distraction: beh.distraction,
-      fearCursor: specBeh.fearCursor || false,
+      fearCursor:  specBeh.fearCursor  || false,
+      fearOthers:  specBeh.fearOthers  || false,
+      fearSize:    spec.fearSize       != null ? spec.fearSize : 3,
     };
 
     // 50/50 chance to spawn on the right side of the screen
@@ -405,6 +429,8 @@
       distractionTargetX:     null,
       fleeTargetX:            null,
       fleeUntil:              0,
+      peerFleeTargetX:        null,
+      peerFleeUntil:          0,
       lastStepTime:           0,
       lastGif:                null,
       isHovered:              false,
@@ -1097,6 +1123,91 @@
         // Outside fear radius — clear flee state
         s.fleeTargetX = null;
         s.fleeUntil   = 0;
+      }
+    }
+
+    /* ── Peer-fear: flee from nearby animals that are bigger/scarier ── */
+    if (c.fearOthers && !s.isDragged) {
+      var BASE_PEER_RADIUS = 120; // px baseline; scales up with size difference
+      var mySize = c.fearSize;
+      var worstThreat  = null;
+      var worstThreatX = 0;
+      var worstScore   = 0;
+
+      for (var pi = 0; pi < _allPets.length; pi++) {
+        var peer = _allPets[pi];
+        if (peer === this) continue;
+        var peerSize = peer._cfg.fearSize != null ? peer._cfg.fearSize : 3;
+        var sizeDiff = peerSize - mySize;
+        if (sizeDiff <= 0) continue; // only scared of bigger animals
+
+        var peerRect = peer._wrapEl.getBoundingClientRect();
+        var peerCX   = peerRect.left + peerRect.width  / 2;
+        var peerCY   = peerRect.top  + peerRect.height / 2;
+        var myCX     = wrapRect.left + wrapRect.width  / 2;
+        var myCY     = wrapRect.top  + wrapRect.height / 2;
+        var peerDist = Math.hypot(peerCX - myCX, peerCY - myCY);
+        // Radius grows linearly with size difference; dino(9) vs rat(1)=8 → 240px+120 = 360px
+        var triggerRadius = BASE_PEER_RADIUS + sizeDiff * 30;
+        if (peerDist > triggerRadius) continue;
+
+        var score = sizeDiff * (1 - peerDist / triggerRadius); // 0–8, higher = scarier
+        if (score > worstScore) {
+          worstScore   = score;
+          worstThreat  = peer;
+          worstThreatX = peerCX;
+        }
+      }
+
+      if (worstThreat !== null) {
+        // Lazy pets only react 30% of the time — can't be bothered
+        if (c.lazy && Math.random() < 0.70) {
+          // shrug — fall through to normal movement
+        } else {
+          // Use dedicated peer-flee state so cursor-fear can't clobber it
+          var peerNeedsNewFlee = s.peerFleeTargetX === null || ts >= s.peerFleeUntil ||
+            Math.abs(s.peerFleeTargetX - x) < 24;
+
+          if (peerNeedsNewFlee) {
+            var peerFleeDir  = (wrapRect.left + wrapRect.width / 2) >= worstThreatX ? 1 : -1;
+            var peerFleeDist = 80 + worstScore * parentW * 0.04;
+            peerFleeDist     = Math.min(peerFleeDist, parentW * 0.45);
+            s.peerFleeTargetX = Math.min(Math.max(20, x + peerFleeDir * peerFleeDist), parentW - 20);
+            s.peerFleeUntil   = ts + 400 + Math.random() * 300;
+
+            // Sprint chance scales with size difference
+            var sizeDiff3    = worstThreat._cfg.fearSize - mySize;
+            var sprintChance = Math.min(1, sizeDiff3 / 5);
+            if (!c.lazy && Math.random() < sprintChance) {
+              var sprintAct = c.movementActions[c.movementActions.length - 1];
+              s.movementAction    = sprintAct ? sprintAct.name : s.movementAction;
+              s.movementSpeedMult = sprintAct ? sprintAct.speedMultiplier : s.movementSpeedMult;
+            } else {
+              var trotAct = c.movementActions[Math.floor(c.movementActions.length / 2)];
+              s.movementAction    = trotAct ? trotAct.name : s.movementAction;
+              s.movementSpeedMult = trotAct ? trotAct.speedMultiplier : s.movementSpeedMult;
+            }
+          }
+
+          var pFleeDiffX = s.peerFleeTargetX - x;
+          var pFleeDistX = Math.abs(pFleeDiffX) || 0.0001;
+          if (Math.abs(pFleeDiffX) > 0.5) s.facingDir = pFleeDiffX < 0 ? -1 : 1;
+          var pFleeSpeedMult = c.lazy ? 0.9 : 1.4;
+          x += (pFleeDiffX / pFleeDistX) * c.speed * s.movementSpeedMult * pFleeSpeedMult;
+          x  = Math.min(Math.max(16, x), parentW - 16);
+          s.x = x;
+          if (!c.lazy) {
+            s.jumpPhase = (s.jumpPhase || 0) + 0.9;
+            this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * 4) + 'px';
+          }
+          s.idleAction      = c.idleActions[0] ? c.idleActions[0].name : 'idle';
+          s.idleActionUntil = 0;
+          this._setGif(s.movementAction);
+          this._applyFacing();
+          this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+          this._rafId = requestAnimationFrame(this._tick);
+          return;
+        }
       }
     }
 
