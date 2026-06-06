@@ -11,12 +11,15 @@ class Config {
 
   _applyAvatars() {
     try {
-      const pfp   = 'https://github.com/jk-dr/p/blob/main/IMG_4440.png?raw=true';
-      const chode = 'https://github.com/jk-dr/p/blob/main/chode.png?raw=true';
-      document.querySelector('#profile-drop img').src = pfp;
-      document.querySelector('#profile-accordion img').src = pfp;
-      document.querySelectorAll('[src="/portrait.php?id=5147&size=square64"]')
-        .forEach(e => e.src = chode);
+      const { pfp, chode } = this.data.avatars ?? {};
+      if (pfp) {
+        document.querySelector('#profile-drop img').src = pfp;
+        document.querySelector('#profile-accordion img').src = pfp;
+      }
+      if (chode) {
+        document.querySelectorAll('[src="/portrait.php?id=5147&size=square64"]')
+          .forEach(e => e.src = chode);
+      }
     } catch (e) {
       alert("An error occured when running applyavatars");
     }
