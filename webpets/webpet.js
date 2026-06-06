@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets sfhdgt
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1515,64 +1515,68 @@
   };
 
   WebBall.prototype._tick = function () {
-    var s  = this._state;
-    var c  = this._cfg;
+    var s = this._state;
+    var c = this._cfg;
 
-    if (s.isDragged) {
-      this._rafId = requestAnimationFrame(this._tick);
-      return;
-    }
-
-    var GRAVITY      = 0.5;
-    var BOUNCE_FLOOR = 0.55;
-    var BOUNCE_WALL  = 0.45;
-    var MIN_BOUNCE   = 2.5;
-    var MAX_FALL     = 30;
-
-    var w         = c.spriteW * c.scale;
-    var h         = c.spriteH * c.scale;
-    var vw        = window.innerWidth;
-    var vh        = window.innerHeight;
-    var floor     = vh - h;
-    var rightEdge = vw - w;
-
-    // Always apply gravity
-    s.velY = Math.min(s.velY + GRAVITY, MAX_FALL);
-
-    s.airX += s.velX;
-    s.airY += s.velY;
-
-    // Left/right walls
-    if (s.airX <= 0) {
-      s.airX = 0;
-      s.velX = Math.abs(s.velX) * BOUNCE_WALL;
-    } else if (s.airX >= rightEdge) {
-      s.airX = rightEdge;
-      s.velX = -Math.abs(s.velX) * BOUNCE_WALL;
-    }
-
-    // Ceiling
-    if (s.airY <= 0) {
-      s.airY = 0;
-      s.velY = Math.abs(s.velY) * BOUNCE_WALL;
-    }
-
-    // Floor
-    if (s.airY >= floor) {
-      s.airY = floor;
-      if (s.velY > MIN_BOUNCE) {
-        s.velY = -s.velY * BOUNCE_FLOOR;
-        s.velX =  s.velX * BOUNCE_FLOOR;
-      } else {
-        s.velY = 0;
-        // Rolling friction when on floor
-        s.velX *= 0.985;
-        if (Math.abs(s.velX) < 0.3) s.velX = 0;
+    try {
+      if (s.isDragged) {
+        this._rafId = requestAnimationFrame(this._tick);
+        return;
       }
-    }
 
-    this._wrapEl.style.left = s.airX + 'px';
-    this._wrapEl.style.top  = s.airY + 'px';
+      var GRAVITY      = 0.5;
+      var BOUNCE_FLOOR = 0.55;
+      var BOUNCE_WALL  = 0.45;
+      var MIN_BOUNCE   = 2.5;
+      var MAX_FALL     = 30;
+
+      var w         = c.spriteW * c.scale;
+      var h         = c.spriteH * c.scale;
+      var vw        = window.innerWidth;
+      var vh        = window.innerHeight;
+      var floor     = vh - h;
+      var rightEdge = vw - w;
+
+      // Always apply gravity
+      s.velY = Math.min(s.velY + GRAVITY, MAX_FALL);
+
+      s.airX += s.velX;
+      s.airY += s.velY;
+
+      // Left/right walls
+      if (s.airX <= 0) {
+        s.airX = 0;
+        s.velX = Math.abs(s.velX) * BOUNCE_WALL;
+      } else if (s.airX >= rightEdge) {
+        s.airX = rightEdge;
+        s.velX = -Math.abs(s.velX) * BOUNCE_WALL;
+      }
+
+      // Ceiling
+      if (s.airY <= 0) {
+        s.airY = 0;
+        s.velY = Math.abs(s.velY) * BOUNCE_WALL;
+      }
+
+      // Floor
+      if (s.airY >= floor) {
+        s.airY = floor;
+        if (s.velY > MIN_BOUNCE) {
+          s.velY = -s.velY * BOUNCE_FLOOR;
+          s.velX =  s.velX * BOUNCE_FLOOR;
+        } else {
+          s.velY = 0;
+          // Rolling friction when on floor
+          s.velX *= 0.985;
+          if (Math.abs(s.velX) < 0.3) s.velX = 0;
+        }
+      }
+
+      this._wrapEl.style.left = s.airX + 'px';
+      this._wrapEl.style.top  = s.airY + 'px';
+    } catch (e) {
+      console.error('[WebBall] tick error:', e);
+    }
 
     this._rafId = requestAnimationFrame(this._tick);
   };
