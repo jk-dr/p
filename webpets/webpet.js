@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets !
+ * webpet.js — Standalone, zero-dependency web pets 
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -954,6 +954,12 @@
     var x = s.x;
     var targetX;
 
+    // Pre-compute hover distance so we can use it in targetX resolution below
+    var cx0 = wrapRect.left + wrapRect.width  / 2;
+    var cy0 = wrapRect.top  + wrapRect.height / 2;
+    var distToMouse = Math.hypot(this._mouseX - cx0, this._mouseY - cy0);
+    var cursorNearby = this._hasRealPointer && distToMouse <= c.hoverDist;
+
     if (c.followMouse && this._hasRealPointer) {
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
         // Temporarily distracted — wander to a nearby spot, ignore the mouse
@@ -961,6 +967,21 @@
       } else {
         s.distractionTargetX = null; // distraction expired, back to mouse
         targetX = this._mouseX - parentRect.left;
+      }
+    } else if (cursorNearby && !c.followMouse) {
+      // Interest spike: free-roaming pet notices the cursor and walks straight to it.
+      // Cancel any idle pause and override the movement target so it reacts immediately.
+      targetX = this._mouseX - parentRect.left;
+      s.movementPauseUntil = 0;
+      // Pick the fastest available movement action if not already heading this way
+      if (s.movementTargetX === null || Math.abs(s.movementTargetX - targetX) > c.idleDist) {
+        var fastActions = c.movementActions.filter(function(a) { return a.speedMultiplier >= 1.35; });
+        if (fastActions.length) {
+          var fa = fastActions[Math.floor(Math.random() * fastActions.length)];
+          s.movementAction    = fa.name;
+          s.movementSpeedMult = fa.speedMultiplier;
+        }
+        s.movementTargetX = targetX;
       }
     } else if (ts < s.movementPauseUntil) {
       targetX = x;
@@ -981,27 +1002,18 @@
       s.facingDir = diffX < 0 ? -1 : 1;
     }
 
-    // Hover detection (distance from mouse to sprite centre)
-    var cx = wrapRect.left + wrapRect.width  / 2;
-    var cy = wrapRect.top  + wrapRect.height / 2;
-    var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
-
-    // isHovering: cursor is close AND (for followMouse pets) not mid-distraction wander
-    var isHovering = this._hasRealPointer && distToMouse <= c.hoverDist
-      && (!c.followMouse || s.distractionTargetX === null);
-
-    this._showBubble(isHovering);
-
-    if (isHovering && c.followMouse) {
-      /* ── Hover state — followMouse pets only ────────────────────────────
-         Free-roaming pets show the hover gif but still run movement below. */
+    // cursorNearby already computed above (reused here for hover gif / bubble)
+    if (cursorNearby && s.distractionTargetX === null) {
+      /* ── Hover state ── */
+      // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
       if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
       this._setGif(c.hoverAction);
       this._applyFacing();
+      this._showBubble(true);
 
-      // Boost distraction 10× (capped at 0.8) so the pet can escape the cursor
-      if (c.distraction > 0 && ts >= s.distractionUntil && Math.random() < Math.min(c.distraction * 50, 0.8)) {
+      // followMouse pets: boost distraction 10× (capped 0.8) so they can escape
+      if (c.followMouse && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < Math.min(c.distraction * 50, 0.8)) {
         var hMargin = 16;
         var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
         var hDir    = Math.random() < 0.5 ? -1 : 1;
@@ -1011,11 +1023,11 @@
       }
 
     } else {
-      // Movement / idle logic runs for ALL non-followMouse pets, and for
-      // followMouse pets that are currently distracted (distractionTargetX set).
+      this._showBubble(false);
 
       if (idle) {
         /* ── Idle state ── */
+        // Reset jump / wobble when transitioning to idle
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
         if (!c.followMouse || !this._hasRealPointer) {
@@ -1027,12 +1039,7 @@
         if (ts > s.idleCooldownUntil && ts > s.idleActionUntil) {
           this._pickIdleAction(ts);
         }
-        // Free-roaming pets near the cursor show the hover gif even while idle
-        if (isHovering) {
-          this._setGif(c.hoverAction);
-        } else {
-          this._setGif(s.idleAction);
-        }
+        this._setGif(s.idleAction);
         this._applyFacing();
 
       } else {
@@ -1092,14 +1099,8 @@
         s.idleActionUntil  = 0;
         s.idleCooldownUntil = 0;
 
-        // Free-roaming pets near the cursor show the hover gif even while walking
-        if (isHovering) {
-          this._setGif(c.hoverAction);
-          this._applyFacing();
-        } else {
-          this._setGif(s.movementAction);
-          this._applyTransforms(wobbleRot);
-        }
+        this._setGif(s.movementAction);
+        this._applyTransforms(wobbleRot);
       }
     }
 
