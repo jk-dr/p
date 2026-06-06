@@ -1579,6 +1579,18 @@
       console.error('[WebBall] tick error:', e);
     }
 
+    console.log("[BALL TICK]", {
+      x: Math.round(s.airX),
+      y: Math.round(s.airY),
+      vx: Number(s.velX?.toFixed(2)),
+      vy: Number(s.velY?.toFixed(2)),
+      gravity: GRAVITY,
+      maxFall: MAX_FALL,
+      floor: Math.round(window.innerHeight - (c.spriteH * c.scale)),
+      spriteH: c.spriteH,
+      scale: c.scale
+    });
+
     this._rafId = requestAnimationFrame(this._tick);
   };
 
