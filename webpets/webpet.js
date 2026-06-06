@@ -1,4 +1,18 @@
 /**
+ * webpet.js — Standalone, zero-dependency web pets!
+ *
+ * Drop-in usage:
+ *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
+ *
+ * Programmatic usage:
+ *   <script src="/webpet.js"></script>
+ *   <script>
+ *     const pet = new WebPet({ animal: 'fox', color: 'red' });
+ *   </script>
+ *
+ * The script auto-detects where GIF assets live based on its own <script src>.
+ * If you need to override: new WebPet({ animal: 'fox', mediaBase: 'https://cdn.example.com/media' });
+ *
  * Available animals:
  *   chicken, clippy, cockatiel, crab, deno, dog, fox, horse, mod, monkey,
  *   morph, panda, rat, rocky, rubber-duck, skeleton, snail, snake, totoro,
@@ -484,23 +498,13 @@
       'width:'      + w + 'px',
       'height:'     + h + 'px',
       'z-index:'    + c.zIndex,
-      'pointer-events:none',
+      'pointer-events:auto',
       'transform-origin:bottom center',
       'overflow:visible',
       'cursor:grab',
       'user-select:none',
     ].join(';');
     this._wrapEl = wrap;
-
-    var dragHandle = document.createElement('div');
-    dragHandle.style.cssText = [
-      'position:absolute',
-      'inset:0',
-      'pointer-events:auto'
-    ].join(';');
-    
-    wrap.appendChild(dragHandle);
-    this._dragHandle = dragHandle;
 
     // Sprite — background-image driven GIF display
     var sprite = document.createElement('div');
@@ -596,11 +600,11 @@
   WebPet.prototype._start = function () {
     document.addEventListener('mousemove', this._onMouseMove);
     // Drag listeners on the wrap (mousedown) and document (move/up so drags don't break on fast moves)
-    this._dragHandle.addEventListener('mousedown', this._onDragStart);
+    this._wrapEl.addEventListener('mousedown', this._onDragStart);
     document.addEventListener('mousemove',  this._onDragMove);
     document.addEventListener('mouseup',    this._onDragEnd);
     // Touch support
-    this._dragHandle.addEventListener('touchstart', this._onDragStart, { passive: false });
+    this._wrapEl.addEventListener('touchstart', this._onDragStart, { passive: false });
     document.addEventListener('touchmove',  this._onDragMove,  { passive: false });
     document.addEventListener('touchend',   this._onDragEnd);
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -952,7 +956,6 @@
 
     if (c.followMouse && this._hasRealPointer) {
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
-        
         // Temporarily distracted — wander to a nearby spot, ignore the mouse
         targetX = s.distractionTargetX;
       } else {
@@ -982,10 +985,9 @@
     var cx = wrapRect.left + wrapRect.width  / 2;
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
-    
 
     if (this._hasRealPointer && distToMouse <= c.hoverDist && s.distractionTargetX === null) {
-      /* ── Hover state ── */
+      /* ── Hover state — only when NOT already distracted ── */
       // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
       if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
@@ -993,10 +995,9 @@
       this._applyFacing();
       this._showBubble(true);
 
-      // Pets doing the swipe/hover animation right next to the mouse are easily
-      // over-stimulated — boost distraction chance 5× while in hover range.
-      
-      if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < Math.min(c.distraction * 100, 0.8)) {
+      // Boost distraction 10× while in hover range (capped at 0.8) so pets
+      // can get curious/spooked and wander off rather than freezing forever.
+      if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < Math.min(c.distraction * 50, 0.8)) {
         var hMargin = 16;
         var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
         var hDir    = Math.random() < 0.5 ? -1 : 1;
@@ -1004,8 +1005,8 @@
         s.distractionUntil   = ts + 1000 + Math.random() * 2000;
         this._pickMovementAction();
       }
-    }
-    else {
+
+    } else {
       this._showBubble(false);
 
       if (idle) {
@@ -1087,15 +1088,6 @@
       }
     }
 
-    if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
-        var hMargin = 16;
-        var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
-        var hDir    = Math.random() < 0.5 ? -1 : 1;
-        s.distractionTargetX = Math.min(Math.max(hMargin, x + hDir * hDist), parentW - hMargin);
-        s.distractionUntil   = ts + 1000 + Math.random() * 2000;
-        this._pickMovementAction();
-      }
-
     this._wrapEl.style.left = (x - spriteW / 2) + 'px';
     this._rafId = requestAnimationFrame(this._tick);
   };
@@ -1115,9 +1107,9 @@
       this._onSelectStart = null;
     }
     document.body.style.userSelect = this._prevUserSelect || '';
-    if (this._dragHandle) {
-      this._dragHandle.removeEventListener('mousedown', this._onDragStart);
-      this._dragHandle.removeEventListener('touchstart', this._onDragStart);
+    if (this._wrapEl) {
+      this._wrapEl.removeEventListener('mousedown',  this._onDragStart);
+      this._wrapEl.removeEventListener('touchstart', this._onDragStart);
     }
     if (this._wrapEl && this._wrapEl.parentNode) {
       this._wrapEl.parentNode.removeChild(this._wrapEl);
