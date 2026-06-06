@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets !
+ * webpet.js — Standalone, zero-dependency web pets 
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -272,6 +272,11 @@
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
+     Global pet registry — used for spread-awareness so pets avoid bunching
+  ───────────────────────────────────────────────────────────────────────── */
+  var _allPets = [];
+
+  /* ─────────────────────────────────────────────────────────────────────────
      WebPet constructor
   ───────────────────────────────────────────────────────────────────────── */
 
@@ -380,8 +385,14 @@
       fearCursor: specBeh.fearCursor || false,
     };
 
+    // 50/50 chance to spawn on the right side of the screen
+    var spawnOnRight = Math.random() < 0.5;
+    var spawnX = spawnOnRight
+      ? window.innerWidth * 0.75 + Math.random() * window.innerWidth * 0.2
+      : window.innerWidth * 0.05 + Math.random() * window.innerWidth * 0.2;
+
     this._state = {
-      x:                      10,
+      x:                      spawnX,
       facingDir:              1,
       idleAction:             idleActions[0] ? idleActions[0].name : 'idle',
       idleActionUntil:        0,
@@ -494,10 +505,11 @@
 
     // Outer container — positioned at the bottom of the viewport / parent
     var wrap = document.createElement('div');
+    var initialLeft = this._state.x - (c.spriteW * c.scale / 2);
     wrap.style.cssText = [
       'position:'   + c.position,
       'bottom:0',
-      'left:0',
+      'left:'       + initialLeft + 'px',
       'width:'      + w + 'px',
       'height:'     + h + 'px',
       'z-index:'    + c.zIndex,
@@ -601,6 +613,7 @@
   /* ── Animation loop ──────────────────────────────────────────────────── */
 
   WebPet.prototype._start = function () {
+    _allPets.push(this);
     document.addEventListener('mousemove', this._onMouseMove);
     // Drag listeners on the wrap (mousedown) and document (move/up so drags don't break on fast moves)
     this._wrapEl.addEventListener('mousedown', this._onDragStart);
@@ -836,15 +849,71 @@
     this._state.movementPauseUntil = ts + (p.min + Math.random() * Math.max(0, p.max - p.min)) * mult;
   };
 
+  /**
+   * Find the largest gap between pets (or between a pet and a wall) and
+   * return the centre of that gap as the preferred target region.
+   * Returns null if there are fewer than 2 peers.
+   */
+  WebPet.prototype._spreadTarget = function (x, boundsW) {
+    var margin = 16;
+    // Collect positions of all OTHER pets
+    var others = [];
+    for (var i = 0; i < _allPets.length; i++) {
+      if (_allPets[i] !== this) {
+        others.push(_allPets[i]._state.x);
+      }
+    }
+    if (others.length === 0) return null; // only pet — go anywhere
+
+    // Build a sorted list of "occupied" x values, bounded by the walls
+    var pts = [margin].concat(others).concat([boundsW - margin]);
+    pts.sort(function (a, b) { return a - b; });
+
+    // Find the widest gap
+    var bestGapCentre = null;
+    var bestGapSize   = 0;
+    for (var j = 0; j < pts.length - 1; j++) {
+      var gapSize = pts[j + 1] - pts[j];
+      if (gapSize > bestGapSize) {
+        bestGapSize   = gapSize;
+        bestGapCentre = (pts[j] + pts[j + 1]) / 2;
+      }
+    }
+
+    // Only bother heading there if the gap is meaningfully larger than our
+    // current position's nearest gap (i.e. we're actually bunching).
+    if (bestGapSize < boundsW * 0.15) return null;
+
+    // Add a small random jitter so pets don't all converge on the exact centre
+    var jitter = (Math.random() - 0.5) * bestGapSize * 0.35;
+    return Math.min(boundsW - margin, Math.max(margin, bestGapCentre + jitter));
+  };
+
   WebPet.prototype._pickMovementTarget = function (x, boundsW) {
     var margin  = 16;
     var maxX    = Math.max(margin, boundsW - margin);
 
-    // Nervous pets take short, erratic dashes rather than long walks
+    // Nervous pets take short, erratic dashes rather than long walks —
+    // but still prefer emptier areas when bunching is detected.
     if (this._cfg.nervous) {
-      var dist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
-      var dir  = Math.random() < 0.5 ? -1 : 1;
-      this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + dir * dist));
+      var spreadT = this._spreadTarget(x, boundsW);
+      if (spreadT !== null && Math.random() < 0.6) {
+        // Head toward the spread target but in a short nervous hop
+        var nervDir  = spreadT > x ? 1 : -1;
+        var nervDist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
+        this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + nervDir * nervDist));
+      } else {
+        var dist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
+        var dir  = Math.random() < 0.5 ? -1 : 1;
+        this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + dir * dist));
+      }
+      return;
+    }
+
+    // Spread-aware targeting: 70% of the time try to fill empty space
+    var spreadTarget = this._spreadTarget(x, boundsW);
+    if (spreadTarget !== null && Math.random() < 0.7) {
+      this._state.movementTargetX = spreadTarget;
       return;
     }
 
@@ -1153,6 +1222,8 @@
 
   /** Stop animation and remove the pet from the DOM. */
   WebPet.prototype.destroy = function () {
+    var idx = _allPets.indexOf(this);
+    if (idx !== -1) _allPets.splice(idx, 1);
     if (this._rafId) cancelAnimationFrame(this._rafId);
     document.removeEventListener('mousemove', this._onMouseMove);
     document.removeEventListener('mousemove', this._onDragMove);
