@@ -1395,7 +1395,7 @@
     this.name    = ballName;
 
     var mediaBase = options.mediaBase || _defaultMediaBase;
-    var scale     = options.scale  != null ? +options.scale  : 0.25;
+    var scale     = options.scale  != null ? +options.scale  : 0.5;
     var zIndex    = options.zIndex != null ? +options.zIndex : 9999999998;
     var position  = options.position || 'fixed';
     var spriteW   = 64;
