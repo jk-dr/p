@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets !
+ * webpet.js — Standalone, zero-dependency web pets 
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -1011,18 +1011,26 @@
       var registry = WebPet._registry;
       for (var ri = 0; ri < registry.length; ri++) {
         var other = registry[ri];
-        if (other === this || other._state.isDragged || other._state.isFalling) continue;
+        if (other === this || other._cfg.animal === c.animal || other._state.isDragged || other._state.isFalling) continue;
         var otherRect = other._wrapEl.getBoundingClientRect();
         var otherCx   = otherRect.left + otherRect.width  / 2;
         var otherCy   = otherRect.top  + otherRect.height / 2;
         var distToPet = Math.hypot(otherCx - cx_f, otherCy - cy_f);
-        if (distToPet <= petFearRadius) {
+        // sizeFactor: how much bigger the threat is relative to this pet.
+        // >1 = threat is larger (more scary), <1 = threat is smaller (less scary).
+        // Clamped so a giant pet can't push fear above 1, and a tiny pet still
+        // triggers a mild reaction (floor at 0.1 so fear never completely vanishes).
+        var sizeFactor    = Math.min(2, Math.max(0.1, other._cfg.scale / c.scale));
+        var effectiveFear = Math.min(1, c.petFear * sizeFactor);
+        // Trigger radius also grows with size — a horse is intimidating from further away
+        var scaledRadius  = petFearRadius * sizeFactor;
+        if (distToPet <= scaledRadius && effectiveFear > 0) {
           var otherX = other._state.x;
-          var fleeTargetP = this._pickFleeTarget(x, otherX, c.petFear, parentW);
+          var fleeTargetP = this._pickFleeTarget(x, otherX, effectiveFear, parentW);
           s.movementTargetX  = fleeTargetP;
           s.movementPauseUntil = 0;
           s.distractionTargetX = null;
-          s.fleeUntil = ts + 500 + c.petFear * 2000;
+          s.fleeUntil = ts + 500 + effectiveFear * 2000;
           var fastPool_p = c.movementActions.filter(function(a) { return a.speedMultiplier >= 1.35; });
           if (!fastPool_p.length) fastPool_p = c.movementActions;
           var fap = fastPool_p[Math.floor(Math.random() * fastPool_p.length)];
