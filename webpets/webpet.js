@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets!
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -101,7 +101,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Dogs are enthusiastic — they bound along, wag, and chase squirrels
-      behaviour: { jumpy: 5, distraction: 0.06 },
+      behaviour: { jumpy: 5, distraction: 0.06, chasesObjects: true },
       fearSize: 7,  // big dog, scary to small things
     },
     fox: {
@@ -111,7 +111,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Foxes are cunning — quick direction changes, light prance
-      behaviour: { flipChance: 0.08, jumpy: 3, distraction: 0.03 },
+      behaviour: { flipChance: 0.08, jumpy: 3, distraction: 0.03, chasesObjects: true },
       fearSize: 6,  // predator
     },
     horse: {
@@ -293,9 +293,18 @@
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
-     Global pet registry — used for spread-awareness so pets avoid bunching
+     Global entity registry — used for spread-awareness so pets avoid bunching,
+     and for followEntity targeting across WebPet and WebBall instances.
   ───────────────────────────────────────────────────────────────────────── */
-  var _allPets = [];
+  var _allEntities = [];           // replaces _allPets; holds WebPet and WebBall instances
+  var _entityCounts = {};          // { 'fox': 2, 'dog': 1, 'ball': 1, … }
+
+  function _resolveEntity(name) {
+    for (var _ri = 0; _ri < _allEntities.length; _ri++) {
+      if (_allEntities[_ri].name === name) return _allEntities[_ri];
+    }
+    return null;
+  }
 
   /* ─────────────────────────────────────────────────────────────────────────
      WebPet constructor
@@ -312,7 +321,8 @@
    * @param {number}  [options.hoverDist]   — Mouse distance to trigger hover action (default 50)
    * @param {string}  [options.hoverAction] — Action played when hovered (default from catalog)
    * @param {string}  [options.hoverMessage]— Speech bubble text shown on hover
-   * @param {boolean} [options.followMouse] — If true, pet chases the cursor
+   * @param {string}  [options.followEntity] — Name of the entity to follow; falls back to wander if not found
+   * @param {string}  [options.name]         — Unique display name; default '<animal>-<N>'
    * @param {string}  [options.position]    — CSS position ('fixed'|'absolute', default 'fixed')
    * @param {number}  [options.zIndex]      — CSS z-index (default 9999)
    * @param {string}  [options.mediaBase]   — Base URL for GIF assets (auto-detected from script src)
@@ -326,13 +336,17 @@
    * @param {number}  [options.flipChance]       — 0–1 probability per step of reversing direction mid-walk (default 0)
    * @param {boolean} [options.nervous]          — Short erratic targets, higher flip chance, quicker pause cycles
    * @param {boolean} [options.lazy]             — Very long idle pauses, always picks the slowest movement action
- * @param {number}  [options.distraction]      — 0–1 chance per tick of losing interest in the mouse and wandering to a random nearby spot (followMouse pets only; no-op in free-roam mode where random targets are already chosen)
+ * @param {number}  [options.distraction]      — 0–1 chance per tick of losing interest and wandering to a random nearby spot (followEntity pets only; no-op in free-roam mode where random targets are already chosen)
    */
   function WebPet(options) {
     options = options || {};
 
     var animalId = options.animal || 'fox';
     var spec = ANIMALS[animalId] || ANIMALS['fox'];
+
+    // Auto-name: increment counter for this animal type, build default name
+    _entityCounts[animalId] = (_entityCounts[animalId] || 0) + 1;
+    var entityName = options.name || (animalId + '-' + _entityCounts[animalId]);
 
     var color = options.color || spec.defaultColor;
     var subcolor = options.subcolor || 'brown';
@@ -388,7 +402,8 @@
       hoverDist:     options.hoverDist != null ? +options.hoverDist : 50,
       hoverAction:   hoverAction,
       idlePauseMs:   options.idlePauseMs || { min: 1500, max: 2200 },
-      followMouse:   !!options.followMouse,
+      followEntity:  options.followEntity || null,
+      name:          entityName,
       position:      options.position || 'fixed',
       zIndex:        options.zIndex != null ? +options.zIndex : 9999,
       hoverMessage:  options.hoverMessage || '',
@@ -406,7 +421,10 @@
       fearCursor:  specBeh.fearCursor  || false,
       fearOthers:  specBeh.fearOthers  || false,
       fearSize:    spec.fearSize       != null ? spec.fearSize : 3,
+      chasesObjects: (specBeh.chasesObjects && options.followEntity == null) ? true : false,
     };
+
+    this.name = entityName;
 
     // 50/50 chance to spawn on the right side of the screen
     var spawnOnRight = Math.random() < 0.5;
@@ -638,7 +656,7 @@
   /* ── Animation loop ──────────────────────────────────────────────────── */
 
   WebPet.prototype._start = function () {
-    _allPets.push(this);
+    _allEntities.push(this);
     document.addEventListener('mousemove', this._onMouseMove);
     // Drag listeners on the wrap (mousedown) and document (move/up so drags don't break on fast moves)
     this._wrapEl.addEventListener('mousedown', this._onDragStart);
@@ -883,9 +901,9 @@
     var margin = 16;
     // Collect positions of all OTHER pets
     var others = [];
-    for (var i = 0; i < _allPets.length; i++) {
-      if (_allPets[i] !== this) {
-        others.push(_allPets[i]._state.x);
+    for (var i = 0; i < _allEntities.length; i++) {
+      if (_allEntities[i] !== this && _allEntities[i]._state) {
+        others.push(_allEntities[i]._state.x);
       }
     }
     if (others.length === 0) return null; // only pet — go anywhere
@@ -1133,8 +1151,8 @@
       var worstThreatX = 0;
       var worstScore   = 0;
 
-      for (var pi = 0; pi < _allPets.length; pi++) {
-        var peer = _allPets[pi];
+      for (var pi = 0; pi < _allEntities.length; pi++) {
+        var peer = _allEntities[pi];
         if (peer === this) continue;
         var peerSize = peer._cfg.fearSize != null ? peer._cfg.fearSize : 3;
         var sizeDiff = peerSize - mySize;
@@ -1210,13 +1228,26 @@
       }
     }
 
-    if (c.followMouse && this._hasRealPointer) {
+    // Lazy ball-chasing lookup: if chasesObjects and no followEntity set yet, find first WebBall
+    if (c.chasesObjects && !c.followEntity) {
+      for (var ei = 0; ei < _allEntities.length; ei++) {
+        if (_allEntities[ei] instanceof WebBall) {
+          c.followEntity = _allEntities[ei].name;
+          break;
+        }
+      }
+    }
+
+    var followTarget = c.followEntity ? _resolveEntity(c.followEntity) : null;
+
+    if (followTarget) {
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
-        // Temporarily distracted — wander to a nearby spot, ignore the mouse
+        // Temporarily distracted — wander to a nearby spot, ignore the target
         targetX = s.distractionTargetX;
       } else {
-        s.distractionTargetX = null; // distraction expired, back to mouse
-        targetX = this._mouseX - parentRect.left;
+        s.distractionTargetX = null; // distraction expired, back to following
+        var ftRect = followTarget._wrapEl.getBoundingClientRect();
+        targetX = ftRect.left + ftRect.width / 2 - parentRect.left;
       }
     } else if (ts < s.movementPauseUntil) {
       targetX = x;
@@ -1245,7 +1276,7 @@
     // If a distraction is already running, skip hover entirely so the pet can
     // actually walk away to its distractionTargetX.  Without this guard the hover
     // branch fires every tick (mouse hasn't moved) and the pet never moves.
-    var isDistracted = c.followMouse && c.distraction > 0 &&
+    var isDistracted = followTarget !== null && c.distraction > 0 &&
                        ts < s.distractionUntil && s.distractionTargetX !== null;
 
     if (this._hasRealPointer && distToMouse <= c.hoverDist && !isDistracted) {
@@ -1259,7 +1290,7 @@
 
       // Pets doing the swipe/hover animation right next to the mouse are easily
       // over-stimulated — boost distraction chance 5× while in hover range.
-      if (c.followMouse && this._hasRealPointer && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
+      if (followTarget && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
         var hMargin = 16;
         var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
         var hDir    = Math.random() < 0.5 ? -1 : 1;
@@ -1276,7 +1307,7 @@
         // Reset jump / wobble when transitioning to idle
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
-        if (!c.followMouse || !this._hasRealPointer) {
+        if (!followTarget) {
           if (s.movementTargetX !== null) {
             s.movementTargetX = null;
             this._scheduleMovementPause(ts);
@@ -1300,9 +1331,9 @@
 
         // Distraction — abandon current target and pick a completely new one.
         // In free-roam mode, replaces movementTargetX directly.
-        // In followMouse mode, sets a temporary distractionTargetX the pet wanders to before snapping back.
+        // In followEntity mode, sets a temporary distractionTargetX the pet wanders to before snapping back.
         if (c.distraction > 0 && Math.random() < c.distraction) {
-          if (c.followMouse && this._hasRealPointer) {
+          if (followTarget) {
             if (ts >= s.distractionUntil) {
               // Start a new distraction: pick a nearby random spot and a duration of 1–3 s
               var dMargin = 16;
@@ -1335,7 +1366,7 @@
           wobbleRot = Math.sin(s.wobblePhase) * c.wobbleDeg;
         }
 
-        if ((!c.followMouse || !this._hasRealPointer) && s.movementTargetX !== null && distX <= c.idleDist) {
+        if (!followTarget && s.movementTargetX !== null && distX <= c.idleDist) {
           s.movementTargetX = null;
           this._scheduleMovementPause(ts);
         }
@@ -1354,12 +1385,293 @@
     this._rafId = requestAnimationFrame(this._tick);
   };
 
+  /* ── WebBall — a physics ball that pets can chase ────────────────────── */
+
+  function WebBall(options) {
+    options = options || {};
+
+    _entityCounts['ball'] = (_entityCounts['ball'] || 0) + 1;
+    var ballName = options.name || ('ball-' + _entityCounts['ball']);
+    this.name    = ballName;
+
+    var mediaBase = options.mediaBase || _defaultMediaBase;
+    var scale     = options.scale  != null ? +options.scale  : 0.5;
+    var zIndex    = options.zIndex != null ? +options.zIndex : 9998;
+    var position  = options.position || 'fixed';
+    var spriteW   = 64;
+    var spriteH   = 64;
+
+    this._cfg = {
+      name:      ballName,
+      mediaBase: mediaBase,
+      scale:     scale,
+      position:  position,
+      zIndex:    zIndex,
+      spriteW:   spriteW,
+      spriteH:   spriteH,
+    };
+
+    var spawnX = window.innerWidth  * 0.3 + Math.random() * window.innerWidth  * 0.4;
+    var spawnY = window.innerHeight * 0.3 + Math.random() * window.innerHeight * 0.3;
+
+    this._state = {
+      airX:       spawnX,
+      airY:       spawnY,
+      velX:       (Math.random() - 0.5) * 4,
+      velY:       0,
+      isFalling:  true,
+      isDragged:  false,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+    };
+
+    this._mouseVX      = null;
+    this._mouseVY      = null;
+    this._lastMoveTime = null;
+    this._rafId        = null;
+    this._prevUserSelect = '';
+    this._onSelectStart  = null;
+
+    this._onDragStart = this._onDragStart.bind(this);
+    this._onDragMove  = this._onDragMove.bind(this);
+    this._onDragEnd   = this._onDragEnd.bind(this);
+    this._tick        = this._tick.bind(this);
+
+    _allEntities.push(this);
+    this._buildDOM();
+    this._start();
+  }
+
+  WebBall.prototype._buildDOM = function () {
+    var c  = this._cfg;
+    var w  = c.spriteW * c.scale;
+    var h  = c.spriteH * c.scale;
+    var s  = this._state;
+
+    var wrap = document.createElement('div');
+    wrap.style.cssText = [
+      'position:'   + c.position,
+      'left:'       + s.airX + 'px',
+      'top:'        + s.airY + 'px',
+      'width:'      + w + 'px',
+      'height:'     + h + 'px',
+      'z-index:'    + c.zIndex,
+      'pointer-events:auto',
+      'cursor:grab',
+      'user-select:none',
+    ].join(';');
+    this._wrapEl = wrap;
+
+    var img = document.createElement('img');
+    img.src = c.mediaBase + '/ball.gif';
+    img.style.cssText = [
+      'width:100%',
+      'height:100%',
+      'pointer-events:none',
+      'image-rendering:pixelated',
+      'image-rendering:crisp-edges',
+    ].join(';');
+    img.draggable = false;
+    wrap.appendChild(img);
+
+    document.body.appendChild(wrap);
+  };
+
+  WebBall.prototype._start = function () {
+    this._wrapEl.addEventListener('mousedown',  this._onDragStart);
+    this._wrapEl.addEventListener('touchstart', this._onDragStart, { passive: false });
+    document.addEventListener('mousemove',  this._onDragMove);
+    document.addEventListener('mouseup',    this._onDragEnd);
+    document.addEventListener('touchmove',  this._onDragMove,  { passive: false });
+    document.addEventListener('touchend',   this._onDragEnd);
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this._rafId = requestAnimationFrame(this._tick);
+    }
+  };
+
+  WebBall.prototype._tick = function () {
+    var s  = this._state;
+    var c  = this._cfg;
+
+    if (s.isDragged) {
+      this._rafId = requestAnimationFrame(this._tick);
+      return;
+    }
+
+    var GRAVITY      = 0.5;
+    var BOUNCE_FLOOR = 0.55;
+    var BOUNCE_WALL  = 0.45;
+    var MIN_BOUNCE   = 2.5;
+    var MAX_FALL     = 30;
+
+    var w         = c.spriteW * c.scale;
+    var h         = c.spriteH * c.scale;
+    var vw        = window.innerWidth;
+    var vh        = window.innerHeight;
+    var floor     = vh - h;
+    var rightEdge = vw - w;
+
+    // Always apply gravity
+    s.velY = Math.min(s.velY + GRAVITY, MAX_FALL);
+
+    s.airX += s.velX;
+    s.airY += s.velY;
+
+    // Left/right walls
+    if (s.airX <= 0) {
+      s.airX = 0;
+      s.velX = Math.abs(s.velX) * BOUNCE_WALL;
+    } else if (s.airX >= rightEdge) {
+      s.airX = rightEdge;
+      s.velX = -Math.abs(s.velX) * BOUNCE_WALL;
+    }
+
+    // Ceiling
+    if (s.airY <= 0) {
+      s.airY = 0;
+      s.velY = Math.abs(s.velY) * BOUNCE_WALL;
+    }
+
+    // Floor
+    if (s.airY >= floor) {
+      s.airY = floor;
+      if (s.velY > MIN_BOUNCE) {
+        s.velY = -s.velY * BOUNCE_FLOOR;
+        s.velX =  s.velX * BOUNCE_FLOOR;
+      } else {
+        s.velY = 0;
+        // Rolling friction when on floor
+        s.velX *= 0.985;
+        if (Math.abs(s.velX) < 0.3) s.velX = 0;
+      }
+    }
+
+    this._wrapEl.style.left = s.airX + 'px';
+    this._wrapEl.style.top  = s.airY + 'px';
+
+    this._rafId = requestAnimationFrame(this._tick);
+  };
+
+  WebBall.prototype._pointerCoords = function (e) {
+    if (e.touches && e.touches.length) {
+      return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+    }
+    return { clientX: e.clientX, clientY: e.clientY };
+  };
+
+  WebBall.prototype._onDragStart = function (e) {
+    if (e.type === 'mousedown' && e.button !== 0) return;
+    e.preventDefault();
+
+    var p    = this._pointerCoords(e);
+    var rect = this._wrapEl.getBoundingClientRect();
+    var s    = this._state;
+
+    s.isDragged    = true;
+    s.velX         = 0;
+    s.velY         = 0;
+    s.dragOffsetX  = rect.left - p.clientX;
+    s.dragOffsetY  = rect.top  - p.clientY;
+
+    this._onSelectStart = function (ev) { ev.preventDefault(); };
+    document.addEventListener('selectstart', this._onSelectStart);
+    this._prevUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+
+    this._wrapEl.style.cursor = 'grabbing';
+    this._mouseVX = null;
+    this._mouseVY = null;
+  };
+
+  WebBall.prototype._onDragMove = function (e) {
+    if (!this._state.isDragged) return;
+    if (e.type === 'touchmove') e.preventDefault();
+
+    var p  = this._pointerCoords(e);
+    var s  = this._state;
+    var c  = this._cfg;
+    var w  = c.spriteW * c.scale;
+    var h  = c.spriteH * c.scale;
+
+    var newLeft = p.clientX + s.dragOffsetX;
+    var newTop  = p.clientY + s.dragOffsetY;
+
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    newLeft = Math.max(0, Math.min(newLeft, vw - w));
+    newTop  = Math.max(0, Math.min(newTop,  vh - h));
+
+    this._wrapEl.style.left = newLeft + 'px';
+    this._wrapEl.style.top  = newTop  + 'px';
+
+    s.airX = newLeft;
+    s.airY = newTop;
+
+    var now2 = performance.now();
+    var dt2  = now2 - (this._lastMoveTime || now2);
+    if (dt2 > 0 && dt2 < 100) {
+      var rawVX2 = (p.clientX - (s.airX - s.dragOffsetX)) / dt2;
+      var rawVY2 = (p.clientY - (s.airY - s.dragOffsetY)) / dt2;
+      this._mouseVX = this._mouseVX == null ? rawVX2 : this._mouseVX * 0.6 + rawVX2 * 0.4;
+      this._mouseVY = this._mouseVY == null ? rawVY2 : this._mouseVY * 0.6 + rawVY2 * 0.4;
+    }
+    this._lastMoveTime = now2;
+    this._lastPointerX = p.clientX;
+    this._lastPointerY = p.clientY;
+  };
+
+  WebBall.prototype._onDragEnd = function (e) {
+    if (!this._state.isDragged) return;
+
+    var s = this._state;
+    s.isDragged = false;
+    this._wrapEl.style.cursor = 'grab';
+
+    if (this._onSelectStart) {
+      document.removeEventListener('selectstart', this._onSelectStart);
+      this._onSelectStart = null;
+    }
+    document.body.style.userSelect = this._prevUserSelect || '';
+
+    var SCALE  = 1.2 * 16.67;
+    var MAX_V  = 40;
+    var velPxMsX = (this._mouseVX != null && isFinite(this._mouseVX)) ? this._mouseVX : 0;
+    var velPxMsY = (this._mouseVY != null && isFinite(this._mouseVY)) ? this._mouseVY : 0;
+    s.velX = Math.max(-MAX_V, Math.min(velPxMsX * SCALE, MAX_V));
+    s.velY = Math.max(-MAX_V, Math.min(velPxMsY * SCALE, MAX_V));
+
+    this._mouseVX = null;
+    this._mouseVY = null;
+  };
+
+  WebBall.prototype.destroy = function () {
+    var idx = _allEntities.indexOf(this);
+    if (idx !== -1) _allEntities.splice(idx, 1);
+    if (this._rafId) cancelAnimationFrame(this._rafId);
+    document.removeEventListener('mousemove', this._onDragMove);
+    document.removeEventListener('mouseup',   this._onDragEnd);
+    document.removeEventListener('touchmove', this._onDragMove);
+    document.removeEventListener('touchend',  this._onDragEnd);
+    if (this._onSelectStart) {
+      document.removeEventListener('selectstart', this._onSelectStart);
+      this._onSelectStart = null;
+    }
+    document.body.style.userSelect = this._prevUserSelect || '';
+    if (this._wrapEl) {
+      this._wrapEl.removeEventListener('mousedown',  this._onDragStart);
+      this._wrapEl.removeEventListener('touchstart', this._onDragStart);
+    }
+    if (this._wrapEl && this._wrapEl.parentNode) {
+      this._wrapEl.parentNode.removeChild(this._wrapEl);
+    }
+  };
+
   /* ── Public API ──────────────────────────────────────────────────────── */
 
   /** Stop animation and remove the pet from the DOM. */
   WebPet.prototype.destroy = function () {
-    var idx = _allPets.indexOf(this);
-    if (idx !== -1) _allPets.splice(idx, 1);
+    var idx = _allEntities.indexOf(this);
+    if (idx !== -1) _allEntities.splice(idx, 1);
     if (this._rafId) cancelAnimationFrame(this._rafId);
     document.removeEventListener('mousemove', this._onMouseMove);
     document.removeEventListener('mousemove', this._onDragMove);
@@ -1405,7 +1717,8 @@
     if (ds.hoverDist)    opts.hoverDist    = parseFloat(ds.hoverDist);
     if (ds.hoverAction)  opts.hoverAction  = ds.hoverAction;
     if (ds.hoverMessage) opts.hoverMessage = ds.hoverMessage;
-    if (ds.followMouse)  opts.followMouse  = ds.followMouse === 'true';
+    if (ds.followEntity) opts.followEntity = ds.followEntity;  // string entity name
+    if (ds.name)         opts.name         = ds.name;
     if (ds.position)     opts.position     = ds.position;
     if (ds.zIndex)       opts.zIndex       = parseInt(ds.zIndex, 10);
     if (ds.mediaBase)    opts.mediaBase    = ds.mediaBase;
@@ -1428,6 +1741,7 @@
   /* ─────────────────────────────────────────────────────────────────────────
      Expose globally
   ───────────────────────────────────────────────────────────────────────── */
-  global.WebPet = WebPet;
+  global.WebPet  = WebPet;
+  global.WebBall = WebBall;
 
 }(window));
