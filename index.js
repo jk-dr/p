@@ -122,6 +122,8 @@ class Config {
           return wp;
         };
 
+        ball._rafId = requestAnimationFrame(ball._tick);
+
         console.log('%c✓ webball loaded', 'color:#22c55e;font-weight:bold');
       }
 
