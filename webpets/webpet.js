@@ -1028,51 +1028,71 @@
 
     /* ── Cursor-fear (rats and fearCursor animals) ── */
     if (c.fearCursor && this._hasRealPointer && !s.isDragged) {
-      var FEAR_RADIUS  = 180;  // px — distance at which the rat notices the cursor
+      // Lazy pets have a much smaller personal-space bubble and can't be bothered to sprint
+      var FEAR_RADIUS  = c.lazy ? 60 : 180;
       var FEAR_MARGIN  = 20;
       var cx_f = wrapRect.left + wrapRect.width  / 2;
       var cy_f = wrapRect.top  + wrapRect.height / 2;
       var mouseDist = Math.hypot(this._mouseX - cx_f, this._mouseY - cy_f);
 
       if (mouseDist < FEAR_RADIUS) {
-        // Pick a flee target away from the cursor, re-evaluate every 300 ms or when close to reaching it
-        var needsNewFlee = ts >= s.fleeUntil ||
-          (s.fleeTargetX !== null && Math.abs(s.fleeTargetX - x) < 24);
+        // Lazy pets only bother 40% of the time — otherwise they just sit there
+        if (c.lazy && Math.random() < 0.6) {
+          // Can't be bothered. Clear flee state and carry on.
+          s.fleeTargetX = null;
+          s.fleeUntil   = 0;
+          // fall through to normal movement below
+        } else {
+          // Pick a flee target away from the cursor, re-evaluate every 300 ms or when close to reaching it
+          var needsNewFlee = ts >= s.fleeUntil ||
+            (s.fleeTargetX !== null && Math.abs(s.fleeTargetX - x) < 24);
 
-        if (needsNewFlee) {
-          // Flee direction = opposite of cursor relative to rat centre
-          var fleeDir = (cx_f >= this._mouseX) ? 1 : -1;
-          var fleeDist = FEAR_RADIUS * 0.6 + Math.random() * parentW * 0.3;
-          s.fleeTargetX = Math.min(
-            Math.max(FEAR_MARGIN, x + fleeDir * fleeDist),
-            parentW - FEAR_MARGIN
-          );
-          s.fleeUntil = ts + 300 + Math.random() * 200;
-          // Always sprint when scared
-          var runAction = c.movementActions[c.movementActions.length - 1];
-          s.movementAction    = runAction ? runAction.name : s.movementAction;
-          s.movementSpeedMult = runAction ? runAction.speedMultiplier : s.movementSpeedMult;
-        }
+          if (needsNewFlee) {
+            // Flee direction = opposite of cursor relative to pet centre
+            var fleeDir = (cx_f >= this._mouseX) ? 1 : -1;
+            // Lazy pets shuffle a short distance; others bolt further
+            var fleeDist = c.lazy
+              ? FEAR_RADIUS * 0.5 + Math.random() * parentW * 0.1
+              : FEAR_RADIUS * 0.6 + Math.random() * parentW * 0.3;
+            s.fleeTargetX = Math.min(
+              Math.max(FEAR_MARGIN, x + fleeDir * fleeDist),
+              parentW - FEAR_MARGIN
+            );
+            s.fleeUntil = ts + 300 + Math.random() * 200;
+            // Lazy pets shuffle at walk speed; others always sprint
+            if (c.lazy) {
+              var walkAction = c.movementActions[0];
+              s.movementAction    = walkAction ? walkAction.name : s.movementAction;
+              s.movementSpeedMult = walkAction ? walkAction.speedMultiplier : s.movementSpeedMult;
+            } else {
+              var runAction = c.movementActions[c.movementActions.length - 1];
+              s.movementAction    = runAction ? runAction.name : s.movementAction;
+              s.movementSpeedMult = runAction ? runAction.speedMultiplier : s.movementSpeedMult;
+            }
+          }
 
-        // Use the flee target instead of normal targeting
-        var fleeDiffX  = s.fleeTargetX - x;
-        var fleeDistX  = Math.abs(fleeDiffX) || 0.0001;
-        if (Math.abs(fleeDiffX) > 0.5) s.facingDir = fleeDiffX < 0 ? -1 : 1;
-        x += (fleeDiffX / fleeDistX) * c.speed * s.movementSpeedMult * 1.6;
-        x  = Math.min(Math.max(16, x), parentW - 16);
-        s.x = x;
-        // Bounce a little while panicking
-        if (c.jumpAmp > 0 || true) {
-          s.jumpPhase = (s.jumpPhase || 0) + 1.2;
-          this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * 6) + 'px';
+          // Use the flee target instead of normal targeting
+          var fleeDiffX  = s.fleeTargetX - x;
+          var fleeDistX  = Math.abs(fleeDiffX) || 0.0001;
+          if (Math.abs(fleeDiffX) > 0.5) s.facingDir = fleeDiffX < 0 ? -1 : 1;
+          // Lazy pets shuffle at normal pace; others bolt at 1.6×
+          var fleeSpeedMult = c.lazy ? 0.9 : 1.6;
+          x += (fleeDiffX / fleeDistX) * c.speed * s.movementSpeedMult * fleeSpeedMult;
+          x  = Math.min(Math.max(16, x), parentW - 16);
+          s.x = x;
+          // Only non-lazy pets panic-bounce
+          if (!c.lazy) {
+            s.jumpPhase = (s.jumpPhase || 0) + 1.2;
+            this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * 6) + 'px';
+          }
+          s.idleAction      = c.idleActions[0] ? c.idleActions[0].name : 'idle';
+          s.idleActionUntil = 0;
+          this._setGif(s.movementAction);
+          this._applyFacing();
+          this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+          this._rafId = requestAnimationFrame(this._tick);
+          return;
         }
-        s.idleAction      = c.idleActions[0] ? c.idleActions[0].name : 'idle';
-        s.idleActionUntil = 0;
-        this._setGif(s.movementAction);
-        this._applyFacing();
-        this._wrapEl.style.left = (x - spriteW / 2) + 'px';
-        this._rafId = requestAnimationFrame(this._tick);
-        return;
       } else {
         // Outside fear radius — clear flee state
         s.fleeTargetX = null;
