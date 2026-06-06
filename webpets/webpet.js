@@ -377,16 +377,6 @@
       nervous:    beh.nervous,
       lazy:       beh.lazy,
       distraction: beh.distraction,
-      // ── Fear / flee options ──
-      // fearOf: one WebPet instance or an array of them; this pet will flee from them.
-      fearOf:     Array.isArray(options.fearOf)
-                    ? options.fearOf
-                    : (options.fearOf ? [options.fearOf] : []),
-      // fearRadius: pixel distance at which fear behaviour activates.
-      fearRadius: options.fearRadius != null ? +options.fearRadius : 150,
-      // panicRisk: 0–1 probability per logic step that a cornered pet will bolt
-      //   THROUGH its fear target rather than cower. Higher = braver (or more desperate).
-      panicRisk:  options.panicRisk  != null ? +options.panicRisk  : 0.12,
     };
 
     this._state = {
@@ -418,11 +408,6 @@
       // Downward velocity in px per logic step (positive = down)
       velY:                   0,
       velX:                   0,
-      // ── Fear / flee state ──
-      // X coordinate the pet is bolting to during a panic dash (null = not dashing).
-      panicDashTarget:        null,
-      // Timestamp until which fear cannot re-trigger (post-dash recovery window).
-      panicCooldownUntil:     0,
     };
 
     this._mouseX = window.innerWidth  / 2;
@@ -969,117 +954,7 @@
     var x = s.x;
     var targetX;
 
-    /* ── Fear / flee / panic-dash ─────────────────────────────────────────
-       When this pet has a `fearOf` list:
-         1. Normal flee  — fear target is near; pet sprints the other way.
-         2. Trapped      — wall on the escape side leaves no room to run.
-            a. Panic dash (panicRisk roll succeeds) — pet bolts THROUGH the
-               fear target to the open space on the far side.
-            b. Cowering  (roll fails)               — pet freezes in place.
-       After a successful panic dash a cooldown window prevents immediate
-       re-triggering so the pet can catch its breath.
-    ─────────────────────────────────────────────────────────────────────── */
-    var fearOverrideTargetX = null;
-
-    if (c.fearOf.length > 0) {
-      // Locate the closest fear target that has a valid state
-      var closestFearDist = Infinity;
-      var closestFearX    = null;
-      for (var fi = 0; fi < c.fearOf.length; fi++) {
-        var ft = c.fearOf[fi];
-        if (!ft || !ft._state) continue;
-        var ftDist = Math.abs(x - ft._state.x);
-        if (ftDist < closestFearDist) {
-          closestFearDist = ftDist;
-          closestFearX    = ft._state.x;
-        }
-      }
-
-      var fearActive = closestFearX !== null
-        && closestFearDist < c.fearRadius
-        && ts >= s.panicCooldownUntil;
-
-      // ── 1. Continue an in-progress panic dash ──────────────────────────
-      if (s.panicDashTarget !== null) {
-        var pdDist = Math.abs(s.panicDashTarget - x);
-        if (pdDist < c.idleDist) {
-          // Reached safety on the far side — tiny jitter-guard cooldown,
-          // then fear kicks straight back in so the pet stays afraid.
-          s.panicDashTarget    = null;
-          s.panicCooldownUntil = ts + 300 + Math.random() * 300;
-          s.movementTargetX    = null;
-          this._scheduleMovementPause(ts);
-          // fearOverrideTargetX stays null; normal logic resumes next tick
-        } else {
-          fearOverrideTargetX = s.panicDashTarget; // keep running toward exit
-        }
-
-      // ── 2. New fear response ───────────────────────────────────────────
-      } else if (fearActive) {
-        var fearM = 16;
-        // Flee direction: away from the fear target (+1 = right, -1 = left)
-        var fleeDir = x >= closestFearX ? 1 : -1;
-        var wallOnEscapeSide  = fleeDir > 0 ? (parentW - fearM) : fearM;
-        var roomToEscape      = Math.abs(x - wallOnEscapeSide);
-        // "Trapped" = not enough room to sprint clear of the fear radius
-        var TRAPPED_THRESHOLD = c.fearRadius * 0.5;
-        var isTrapped         = roomToEscape < TRAPPED_THRESHOLD;
-
-        if (isTrapped) {
-          if (Math.random() < c.panicRisk) {
-            // ── Panic dash: bolt THROUGH / past the fear target ──────────
-            // Target lands on the open side beyond the feared pet.
-            var dashDir  = -fleeDir; // moving toward, then past, the threat
-            var dashDist = closestFearDist * 0.3
-                         + c.fearRadius   * 0.5
-                         + Math.random()  * parentW * 0.2;
-            var dashTarget = closestFearX + dashDir * dashDist;
-            dashTarget = Math.min(parentW - fearM, Math.max(fearM, dashTarget));
-            s.panicDashTarget = dashTarget;
-
-            // Switch to the fastest available movement animation
-            var runPool = c.movementActions.filter(function (a) {
-              return a.speedMultiplier >= 1.8;
-            });
-            if (!runPool.length) runPool = c.movementActions;
-            var runA = runPool[runPool.length - 1];
-            s.movementAction    = runA.name;
-            s.movementSpeedMult = runA.speedMultiplier;
-
-            fearOverrideTargetX = dashTarget;
-
-          } else {
-            // ── Still trapped, roll failed — keep pressing against the wall.
-            // The pet is clearly terrified (run animation, scrabbling at the
-            // edge) and will keep rolling panicRisk every tick until it
-            // eventually screws up the courage to dash.
-            fearOverrideTargetX = wallOnEscapeSide;
-          }
-
-        } else {
-          // ── Normal flee: sprint away from the fear target ────────────────
-          var fleeTargetX = x + fleeDir
-            * (c.fearRadius * 0.75 + Math.random() * parentW * 0.1);
-          fleeTargetX = Math.min(parentW - fearM, Math.max(fearM, fleeTargetX));
-          s.movementTargetX = fleeTargetX;
-
-          var fleePool = c.movementActions.filter(function (a) {
-            return a.speedMultiplier >= 1.35;
-          });
-          if (!fleePool.length) fleePool = c.movementActions;
-          var fleeA = fleePool[fleePool.length - 1];
-          s.movementAction    = fleeA.name;
-          s.movementSpeedMult = fleeA.speedMultiplier;
-
-          fearOverrideTargetX = fleeTargetX;
-        }
-      }
-    }
-    /* ── End fear / flee / panic-dash ──────────────────────────────────── */
-
-    if (fearOverrideTargetX !== null) {
-      targetX = fearOverrideTargetX;
-    } else if (c.followMouse && this._hasRealPointer) {
+    if (c.followMouse && this._hasRealPointer) {
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
         // Temporarily distracted — wander to a nearby spot, ignore the mouse
         targetX = s.distractionTargetX;
@@ -1276,9 +1151,6 @@
     if (ds.nervous)      opts.nervous      = ds.nervous === 'true';
     if (ds.lazy)         opts.lazy         = ds.lazy === 'true';
     if (ds.distraction)  opts.distraction  = parseFloat(ds.distraction);
-    if (ds.fearRadius)   opts.fearRadius   = parseFloat(ds.fearRadius);
-    if (ds.panicRisk)    opts.panicRisk    = parseFloat(ds.panicRisk);
-    // Note: fearOf requires JS references and cannot be set via data attributes.
 
     new WebPet(opts);
   }
