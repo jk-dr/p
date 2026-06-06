@@ -1,7 +1,7 @@
 class Config {
   constructor(data = {}) {
     this.data = data;
-    if (this.data.profile) this._applyAvatars();
+    if (this.data.avatars ) this._applyAvatars();
     if (this.data.dynamic_inject) this._dynamic_js();
     // Run sequentially so both share the same eval'd closure
     this._initPetsAndBall();
