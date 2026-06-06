@@ -1,6 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets aba
- *
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -327,7 +326,7 @@
    * @param {number}  [options.flipChance]       — 0–1 probability per step of reversing direction mid-walk (default 0)
    * @param {boolean} [options.nervous]          — Short erratic targets, higher flip chance, quicker pause cycles
    * @param {boolean} [options.lazy]             — Very long idle pauses, always picks the slowest movement action
- * @param {number}  [options.distraction]      — 0–1 chance per tick of abandoning the current target and picking a new one (no-op when followMouse is true)
+ * @param {number}  [options.distraction]      — 0–1 chance per tick of losing interest in the mouse and wandering to a random nearby spot (followMouse pets only; no-op in free-roam mode where random targets are already chosen)
    */
   function WebPet(options) {
     options = options || {};
@@ -1243,7 +1242,13 @@
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
 
-    if (this._hasRealPointer && distToMouse <= c.hoverDist) {
+    // If a distraction is already running, skip hover entirely so the pet can
+    // actually walk away to its distractionTargetX.  Without this guard the hover
+    // branch fires every tick (mouse hasn't moved) and the pet never moves.
+    var isDistracted = c.followMouse && c.distraction > 0 &&
+                       ts < s.distractionUntil && s.distractionTargetX !== null;
+
+    if (this._hasRealPointer && distToMouse <= c.hoverDist && !isDistracted) {
       /* ── Hover state ── */
       // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
