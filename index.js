@@ -4,10 +4,11 @@ class Config {
     if (this.data.profile) this._applyAvatars();
     if (this.data.dynamic_inject) this._dynamic_js();
     if (Array.isArray(this.data.webpets) && this.data.webpets.length) this._initWebpets();
+    if (this.data.webball) this._initWebball();
     console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject));
     this._cleanNotifications();
   }
-
+ 
   _applyAvatars() {
     try {
       const pfp   = 'https://github.com/jk-dr/p/blob/main/IMG_4440.png?raw=true';
@@ -20,7 +21,7 @@ class Config {
       alert("An error occured when running applyavatars");
     }
   }
-
+ 
   _dynamic_js() {
     try {
       eval(this.data.dynamic_inject)
@@ -28,7 +29,40 @@ class Config {
       alert("Dynamic code injection failed!");
     }
   }
-
+ 
+  async _initWebball() {
+    try {
+      const SRC   = 'https://raw.githubusercontent.com/jk-dr/p/refs/heads/main/webpets/webpet.js';
+      const MEDIA = 'https://raw.githubusercontent.com/jk-dr/p/refs/heads/main/webpets/media';
+ 
+      if (!window.WebBall) {
+        const js = await fetch(SRC).then(r => r.text());
+        (0, eval)(js);
+      }
+ 
+      const ball = new WebBall({ mediaBase: MEDIA });
+      console.log('%c🎾 +ball', 'color:#818cf8');
+ 
+      // Attach to wp if it exists (spawned by _initWebpets), otherwise make a stub
+      const wp = window.wp = window.wp || {};
+      wp.ball = ball;
+      wp.popBall = function () {
+        if (wp.ball) {
+          wp.ball.destroy();
+          wp.ball = null;
+          console.log('%c💨 ball removed', 'color:#f87171');
+        } else {
+          console.log('no ball');
+        }
+        return wp;
+      };
+ 
+      console.log('%c✓ webball loaded', 'color:#22c55e;font-weight:bold');
+    } catch (e) {
+      alert('An error occured when initialising webball :/');
+    }
+  }
+ 
   async _initWebpets() {
     try {
       const SRC   = 'https://raw.githubusercontent.com/jk-dr/p/refs/heads/main/webpets/webpet.js';
@@ -81,7 +115,8 @@ class Config {
             '  wp.spawn(animal, color?, opts?)\n' +
             '  wp.animals()  wp.list()\n' +
             '  wp.pop()      wp.clear()\n' +
-            '  wp.pause()    wp.resume()\n',
+            '  wp.pause()    wp.resume()\n' +
+            '  wp.ball       wp.popBall()\n',
             'color:#818cf8;font-weight:bold','color:#94a3b8'
           ); return this;
         }
@@ -99,13 +134,13 @@ class Config {
       alert("An error occured when initialising webpets :/");
     }
   }
-
+ 
   _cleanNotifications() {
     document.querySelector('#notificationselector_ext')
       ?.closest('li.actions-small-1.status-read')
       ?.remove();
   }
-
+ 
   static async init() {
     try {
       const html = await (await fetch('https://portal.tintern.vic.edu.au/eportfolio/1773/6128')).text();
@@ -119,5 +154,6 @@ class Config {
     }
   }
 }
-
+ 
 (async () => { await Config.init(); })();
+ 
