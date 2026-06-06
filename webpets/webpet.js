@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets aa
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -645,12 +645,95 @@
     wrap.appendChild(bubble);
 
     document.body.appendChild(wrap);
+
+    // Ghost element — a second sprite used to make edge-wrapping seamless.
+    // It mirrors the real sprite but is offset by ±parentW so the pet appears
+    // to slide in from the opposite edge before we do the invisible position swap.
+    var ghost = document.createElement('div');
+    ghost.style.cssText = [
+      'position:'   + c.position,
+      'bottom:0',
+      'left:-9999px',
+      'width:'      + w + 'px',
+      'height:'     + h + 'px',
+      'z-index:'    + c.zIndex,
+      'pointer-events:none',
+      'transform-origin:bottom center',
+      'overflow:visible',
+      'opacity:1',
+    ].join(';');
+
+    var ghostSprite = document.createElement('div');
+    ghostSprite.style.cssText = [
+      'width:100%',
+      'height:100%',
+      'background-repeat:no-repeat',
+      'background-position:bottom center',
+      'background-size:contain',
+      'image-rendering:pixelated',
+      'image-rendering:crisp-edges',
+      'transform:scaleX(1)',
+      'transform-origin:bottom center',
+    ].join(';');
+    this._ghostSpriteEl = ghostSprite;
+    ghost.appendChild(ghostSprite);
+    document.body.appendChild(ghost);
+    this._ghostEl = ghost;
+    this._ghostVisible = false;
   };
 
   WebPet.prototype._showBubble = function (visible) {
     if (!this._cfg.hoverMessage) return;
     this._bubbleEl.style.display = visible ? 'block' : 'none';
     this._state.isHovered = visible;
+  };
+
+  /**
+   * Sync the ghost element's position/appearance with the real sprite.
+   * The ghost is placed exactly one viewport-width away from the real pet,
+   * on whichever side it is approaching — so as the real pet walks off-screen
+   * the ghost is already walking on from the opposite edge.
+   * Call only during normal pathing (not while dragged/falling).
+   * @param {number} x        — logical centre x of the real pet
+   * @param {number} leftPx   — real wrap left offset (px)
+   * @param {number} parentW  — width of the parent/viewport
+   */
+  WebPet.prototype._syncGhost = function (x, leftPx, parentW) {
+    var spriteW = this._cfg.spriteW * this._cfg.scale;
+    var WRAP_MARGIN = spriteW * 1.5;
+
+    // Decide if the pet is near an edge (within one sprite-width of going off-screen)
+    var nearLeft  = x < WRAP_MARGIN * 2;
+    var nearRight = x > parentW - WRAP_MARGIN * 2;
+
+    if (!nearLeft && !nearRight) {
+      // Nowhere near an edge — hide ghost
+      if (this._ghostVisible) {
+        this._ghostEl.style.left = '-9999px';
+        this._ghostVisible = false;
+      }
+      return;
+    }
+
+    // Show ghost on the opposite side
+    var ghostLeft = nearLeft
+      ? leftPx + parentW    // ghost on the right (wrapping from left)
+      : leftPx - parentW;   // ghost on the left  (wrapping from right)
+
+    // Mirror the real sprite's visual state
+    this._ghostSpriteEl.style.backgroundImage = this._spriteEl.style.backgroundImage;
+    this._ghostSpriteEl.style.transform       = this._spriteEl.style.transform;
+    this._ghostEl.style.bottom  = this._wrapEl.style.bottom;
+    this._ghostEl.style.left    = ghostLeft + 'px';
+    this._ghostVisible = true;
+  };
+
+  /** Hide and park the ghost off-screen (call when dragged/falling). */
+  WebPet.prototype._hideGhost = function () {
+    if (this._ghostVisible) {
+      this._ghostEl.style.left = '-9999px';
+      this._ghostVisible = false;
+    }
   };
 
   /* ── Animation loop ──────────────────────────────────────────────────── */
@@ -936,50 +1019,59 @@
     var margin = 16;
     var wrapMargin = boundsW * 0.08;
     var maxX = boundsW + wrapMargin;
-    var minX = -wrapMargin;
-  
-    // Any pet can sometimes choose a wrap path.
-    if (Math.random() < 0.25) {
-      this._state.movementTargetX = Math.random() < 0.5 ? minX : maxX;
-      return;
-    }
-  
-    // Nervous pets still do shorter dashes.
+
+    // Nervous pets take short, erratic dashes rather than long walks —
+    // but still prefer emptier areas when bunching is detected.
     if (this._cfg.nervous) {
+    
+      // 25% chance to intentionally leave the screen
+      if (Math.random() < 0.25) {
+        this._state.movementTargetX =
+          Math.random() < 0.5
+            ? -wrapMargin
+            : boundsW + wrapMargin;
+        return;
+      }
+    
       var spreadT = this._spreadTarget(x, boundsW);
+    
       if (spreadT !== null && Math.random() < 0.6) {
         var nervDir  = spreadT > x ? 1 : -1;
-        var nervDist  = boundsW * 0.05 + Math.random() * boundsW * 0.12;
-        this._state.movementTargetX = x + nervDir * nervDist;
+        var nervDist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
+    
+        this._state.movementTargetX =
+          Math.min(maxX, Math.max(margin, x + nervDir * nervDist));
       } else {
         var dist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
         var dir  = Math.random() < 0.5 ? -1 : 1;
-        this._state.movementTargetX = x + dir * dist;
+    
+        this._state.movementTargetX =
+          Math.min(maxX, Math.max(margin, x + dir * dist));
       }
+    
       return;
     }
-  
+
+    // Spread-aware targeting: 70% of the time try to fill empty space
     var spreadTarget = this._spreadTarget(x, boundsW);
     if (spreadTarget !== null && Math.random() < 0.7) {
       this._state.movementTargetX = spreadTarget;
       return;
     }
-  
+
     var minDist = boundsW * 0.2;
     var maxDist = boundsW * 0.55;
     var dist    = minDist + Math.random() * Math.max(0, maxDist - minDist);
     var avL     = Math.max(0, x - margin);
     var avR     = Math.max(0, maxX - x);
     var dir;
-  
     if (avL >= dist && avR >= dist) dir = Math.random() < 0.5 ? -1 : 1;
     else if (avL >= dist)           dir = -1;
     else if (avR >= dist)           dir = 1;
     else                            dir = avL > avR ? -1 : 1;
-  
-    this._state.movementTargetX = x + dir * dist;
+    this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + dir * dist));
   };
-  
+
   WebPet.prototype._tick = function (ts) {
     var STEP_MS = 125; // ~8fps logic steps
 
@@ -993,12 +1085,14 @@
         this._setGif(s.idleAction || c.idleActions[0].name);
         this._applyFacing();
       }
+      this._hideGhost();
       this._rafId = requestAnimationFrame(this._tick);
       return;
     }
 
     /* ── Falling — runs every RAF frame (60fps) for smooth physics ── */
     if (s.isFalling) {
+      this._hideGhost();
       var GRAVITY   = 0.5;   // px/frame² downward acceleration
       var MAX_FALL  = 25;    // terminal fall velocity (px/frame)
       var BOUNCE    = 0.38;  // energy kept on wall/ceiling bounce (0=dead stop, 1=perfect)
@@ -1142,6 +1236,7 @@
           this._setGif(s.movementAction);
           this._applyFacing();
           this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+          this._hideGhost();
           this._rafId = requestAnimationFrame(this._tick);
           return;
         }
@@ -1231,6 +1326,7 @@
           this._setGif(s.movementAction);
           this._applyFacing();
           this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+          this._hideGhost();
           this._rafId = requestAnimationFrame(this._tick);
           return;
         }
@@ -1296,6 +1392,7 @@
       this._setGif(c.hoverAction);
       this._applyFacing();
       this._showBubble(true);
+      this._hideGhost();
 
       // Pets doing the swipe/hover animation right next to the mouse are easily
       // over-stimulated — boost distraction chance 5× while in hover range.
@@ -1327,6 +1424,7 @@
         }
         this._setGif(s.idleAction);
         this._applyFacing();
+        this._hideGhost();
 
       } else {
         /* ── Moving state ── */
@@ -1360,13 +1458,26 @@
 
         x += (diffX / distX) * c.speed * s.movementSpeedMult;
 
-        // Seamless edge wrapping (only during pathing)
+        // Seamless edge wrapping (only during pathing, not while dragged/falling).
+        // When the pet walks fully off one edge, we teleport its logical x to the
+        // opposite edge — but because the ghost has been shadowing it from there,
+        // the visual transition is invisible to the viewer.
         if (x < -WRAP_MARGIN) {
-          x = parentW + WRAP_MARGIN;
+          x += parentW + WRAP_MARGIN * 2;
+          // Re-align movementTargetX to the new coordinate space so the pet
+          // continues walking toward the same visual destination.
+          if (s.movementTargetX !== null) s.movementTargetX += parentW + WRAP_MARGIN * 2;
+          if (s.distractionTargetX !== null) s.distractionTargetX += parentW + WRAP_MARGIN * 2;
+          if (s.fleeTargetX        !== null) s.fleeTargetX        += parentW + WRAP_MARGIN * 2;
+          if (s.peerFleeTargetX    !== null) s.peerFleeTargetX    += parentW + WRAP_MARGIN * 2;
         } else if (x > parentW + WRAP_MARGIN) {
-          x = -WRAP_MARGIN;
+          x -= parentW + WRAP_MARGIN * 2;
+          if (s.movementTargetX !== null) s.movementTargetX -= parentW + WRAP_MARGIN * 2;
+          if (s.distractionTargetX !== null) s.distractionTargetX -= parentW + WRAP_MARGIN * 2;
+          if (s.fleeTargetX        !== null) s.fleeTargetX        -= parentW + WRAP_MARGIN * 2;
+          if (s.peerFleeTargetX    !== null) s.peerFleeTargetX    -= parentW + WRAP_MARGIN * 2;
         }
-        
+
         s.x = x;
 
         // Vertical bounce (jumpy)
@@ -1398,6 +1509,8 @@
     }
 
     this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+    // Keep ghost in sync for seamless edge wrapping
+    this._syncGhost(x, x - spriteW / 2, parentW);
     this._rafId = requestAnimationFrame(this._tick);
   };
 
@@ -1739,6 +1852,9 @@
     }
     if (this._wrapEl && this._wrapEl.parentNode) {
       this._wrapEl.parentNode.removeChild(this._wrapEl);
+    }
+    if (this._ghostEl && this._ghostEl.parentNode) {
+      this._ghostEl.parentNode.removeChild(this._ghostEl);
     }
   };
 
