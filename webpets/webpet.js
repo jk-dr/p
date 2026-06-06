@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets aa
+ * webpet.js — Standalone, zero-dependency web pets a
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
