@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets cfhgfxn
+ * webpet.js — Standalone, zero-dependency web pets 
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -1003,9 +1003,10 @@
       if (s.panicDashTarget !== null) {
         var pdDist = Math.abs(s.panicDashTarget - x);
         if (pdDist < c.idleDist) {
-          // Reached safety on the far side — start recovery cooldown
+          // Reached safety on the far side — tiny jitter-guard cooldown,
+          // then fear kicks straight back in so the pet stays afraid.
           s.panicDashTarget    = null;
-          s.panicCooldownUntil = ts + 3000 + Math.random() * 2000;
+          s.panicCooldownUntil = ts + 300 + Math.random() * 300;
           s.movementTargetX    = null;
           this._scheduleMovementPause(ts);
           // fearOverrideTargetX stays null; normal logic resumes next tick
@@ -1048,8 +1049,11 @@
             fearOverrideTargetX = dashTarget;
 
           } else {
-            // ── Cowering: panic roll failed — freeze in place ─────────────
-            fearOverrideTargetX = x;
+            // ── Still trapped, roll failed — keep pressing against the wall.
+            // The pet is clearly terrified (run animation, scrabbling at the
+            // edge) and will keep rolling panicRisk every tick until it
+            // eventually screws up the courage to dash.
+            fearOverrideTargetX = wallOnEscapeSide;
           }
 
         } else {
