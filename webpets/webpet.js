@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets 
+ * webpet.js — Standalone, zero-dependency web pets !
  *
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -52,7 +52,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Chickens peck around nervously and bob when they move
-      behaviour: { nervous: true, jumpy: 4, distraction: 0.05, cursorFear: 0.6 },
+      behaviour: { nervous: true, jumpy: 4, distraction: 0.05 },
     },
     clippy: {
       speed: 3.2, defaultColor: 'brown',
@@ -70,7 +70,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Cockatiels are alert little birds — short bursts, slight hop
-      behaviour: { nervous: true, jumpy: 3, distraction: 0.06, cursorFear: 0.5 },
+      behaviour: { nervous: true, jumpy: 3, distraction: 0.06 },
     },
     crab: {
       speed: 3.4, defaultColor: 'red',
@@ -163,8 +163,8 @@
       movement: ['walk', 'walk_fast', 'run'],
       idle: ['idle', 'swipe'],
       hover: 'swipe',
-      // Rats are skittish — erratic dashes, high flip chance
-      behaviour: { nervous: true, flipChance: 0.18, distraction: 0.08, cursorFear: 0.85, petFear: 0.3 },
+      // Rats are skittish — erratic dashes, high flip chance, and TERRIFIED of the cursor
+      behaviour: { nervous: true, flipChance: 0.18, distraction: 0.08, fearCursor: true },
     },
     rocky: {
       speed: 2.8, defaultColor: 'gray',
@@ -183,7 +183,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Rubber ducks bob up and down on water, drifting wherever
-      behaviour: { jumpy: 4, wobble: 3, distraction: 0.05, cursorFear: 0.3 },
+      behaviour: { jumpy: 4, wobble: 3, distraction: 0.05 },
     },
     skeleton: {
       speed: 4.4, defaultColor: 'white',
@@ -202,7 +202,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Snails are the definition of lazy
-      behaviour: { lazy: true, distraction: 0.01, petFear: 0.2 },
+      behaviour: { lazy: true, distraction: 0.01 },
     },
     snake: {
       speed: 3.7, defaultColor: 'green',
@@ -239,7 +239,7 @@
       idle: ['idle', 'swipe'],
       hover: 'swipe',
       // Vampires are unpredictable — they dart and twist
-      behaviour: { nervous: true, flipChance: 0.1, distraction: 0.05, cursorFear: 0.4 },
+      behaviour: { nervous: true, flipChance: 0.1, distraction: 0.05 },
     },
     zappy: {
       speed: 5.0, defaultColor: 'yellow',
@@ -300,9 +300,7 @@
    * @param {number}  [options.flipChance]       — 0–1 probability per step of reversing direction mid-walk (default 0)
    * @param {boolean} [options.nervous]          — Short erratic targets, higher flip chance, quicker pause cycles
    * @param {boolean} [options.lazy]             — Very long idle pauses, always picks the slowest movement action
-   * @param {number}  [options.distraction]      — 0–1 chance per tick of abandoning the current target and picking a new one (no-op when followMouse is true)
-   * @param {number}  [options.cursorFear]       — 0–1 fear of the cursor: 0 = no reaction, 1 = full panic flee; scales flee distance and flee-trigger radius
-   * @param {number}  [options.petFear]          — 0–1 fear of other WebPet instances nearby; same scale as cursorFear
+ * @param {number}  [options.distraction]      — 0–1 chance per tick of abandoning the current target and picking a new one (no-op when followMouse is true)
    */
   function WebPet(options) {
     options = options || {};
@@ -350,8 +348,6 @@
       nervous:    options.nervous    != null ? !!options.nervous  : (specBeh.nervous    != null ? !!specBeh.nervous  : false),
       lazy:       options.lazy       != null ? !!options.lazy     : (specBeh.lazy       != null ? !!specBeh.lazy     : false),
       distraction: options.distraction != null ? +options.distraction : (specBeh.distraction != null ? specBeh.distraction : 0),
-      cursorFear: options.cursorFear != null ? +options.cursorFear : (specBeh.cursorFear != null ? specBeh.cursorFear : 0),
-      petFear:    options.petFear    != null ? +options.petFear   : (specBeh.petFear    != null ? specBeh.petFear    : 0),
     };
     // flipChance: if not set by user or species, derive from nervous
     if (beh.flipChance === null) beh.flipChance = beh.nervous ? 0.15 : 0;
@@ -381,8 +377,7 @@
       nervous:    beh.nervous,
       lazy:       beh.lazy,
       distraction: beh.distraction,
-      cursorFear: Math.max(0, Math.min(1, beh.cursorFear)),
-      petFear:    Math.max(0, Math.min(1, beh.petFear)),
+      fearCursor: specBeh.fearCursor || false,
     };
 
     this._state = {
@@ -397,7 +392,8 @@
       movementTargetX:        null,
       distractionUntil:       0,
       distractionTargetX:     null,
-      fleeUntil:              0,   // timestamp until which the pet is actively fleeing
+      fleeTargetX:            null,
+      fleeUntil:              0,
       lastStepTime:           0,
       lastGif:                null,
       isHovered:              false,
@@ -434,9 +430,6 @@
 
     this._buildDOM();
     this._start();
-
-    // Register in global registry so pets can sense each other
-    WebPet._registry.push(this);
   }
 
   /* ── Helpers ─────────────────────────────────────────────────────────── */
@@ -868,20 +861,6 @@
     this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + dir * dist));
   };
 
-  /**
-   * Compute a flee-target X given the X position of a threat.
-   * fearLevel (0–1) scales how far the pet runs: 0.1 → short dash, 1.0 → full-width bolt.
-   */
-  WebPet.prototype._pickFleeTarget = function (x, threatX, fearLevel, boundsW) {
-    var margin   = 16;
-    var maxX     = Math.max(margin, boundsW - margin);
-    // Direction directly away from the threat
-    var fleeDir  = x >= threatX ? 1 : -1;
-    // Base flee distance scales with fear level (0.1 → 10% of width, 1.0 → 80%)
-    var fleeDist = boundsW * (0.1 + fearLevel * 0.7);
-    return Math.min(maxX, Math.max(margin, x + fleeDir * fleeDist));
-  };
-
   WebPet.prototype._tick = function (ts) {
     var STEP_MS = 125; // ~8fps logic steps
 
@@ -978,74 +957,61 @@
     var x = s.x;
     var targetX;
 
-    // ── Fear: cursor ────────────────────────────────────────────────────────
-    // Trigger radius scales with fear level: at 0.1 it's barely hoverDist,
-    // at 1.0 it's 4× hoverDist so the pet panics from much further away.
-    var cx_f = wrapRect.left + wrapRect.width  / 2;
-    var cy_f = wrapRect.top  + wrapRect.height / 2;
-    var distToMouse_f = Math.hypot(this._mouseX - cx_f, this._mouseY - cy_f);
-    var fearMouseRadius = c.hoverDist * (1 + c.cursorFear * 3);
+    /* ── Cursor-fear (rats and fearCursor animals) ── */
+    if (c.fearCursor && this._hasRealPointer && !s.isDragged) {
+      var FEAR_RADIUS  = 180;  // px — distance at which the rat notices the cursor
+      var FEAR_MARGIN  = 20;
+      var cx_f = wrapRect.left + wrapRect.width  / 2;
+      var cy_f = wrapRect.top  + wrapRect.height / 2;
+      var mouseDist = Math.hypot(this._mouseX - cx_f, this._mouseY - cy_f);
 
-    var isFleeing = ts < s.fleeUntil;
+      if (mouseDist < FEAR_RADIUS) {
+        // Pick a flee target away from the cursor, re-evaluate every 300 ms or when close to reaching it
+        var needsNewFlee = ts >= s.fleeUntil ||
+          (s.fleeTargetX !== null && Math.abs(s.fleeTargetX - x) < 24);
 
-    if (!isFleeing && c.cursorFear > 0 && this._hasRealPointer && distToMouse_f <= fearMouseRadius) {
-      // Cursor is too close — start fleeing
-      var fleeTarget = this._pickFleeTarget(x, this._mouseX - parentRect.left, c.cursorFear, parentW);
-      s.movementTargetX  = fleeTarget;
-      s.movementPauseUntil = 0;
-      s.distractionTargetX = null;
-      // Flee duration scales with fear: 0.1 → ~0.5 s, 1.0 → ~2.5 s
-      s.fleeUntil = ts + 500 + c.cursorFear * 2000;
-      // Pick fastest available action (ignores lazy)
-      var fastPool_c = c.movementActions.filter(function(a) { return a.speedMultiplier >= 1.35; });
-      if (!fastPool_c.length) fastPool_c = c.movementActions;
-      var fac = fastPool_c[Math.floor(Math.random() * fastPool_c.length)];
-      s.movementAction    = fac.name;
-      s.movementSpeedMult = fac.speedMultiplier;
-      isFleeing = true;
-    }
-
-    // ── Fear: other pets ────────────────────────────────────────────────────
-    if (!isFleeing && c.petFear > 0) {
-      var petFearRadius = c.hoverDist * (1 + c.petFear * 3);
-      var registry = WebPet._registry;
-      for (var ri = 0; ri < registry.length; ri++) {
-        var other = registry[ri];
-        if (other === this || other._cfg.animal === c.animal || other._state.isDragged || other._state.isFalling) continue;
-        var otherRect = other._wrapEl.getBoundingClientRect();
-        var otherCx   = otherRect.left + otherRect.width  / 2;
-        var otherCy   = otherRect.top  + otherRect.height / 2;
-        var distToPet = Math.hypot(otherCx - cx_f, otherCy - cy_f);
-        // sizeFactor: how much bigger the threat is relative to this pet.
-        // >1 = threat is larger (more scary), <1 = threat is smaller (less scary).
-        // Clamped so a giant pet can't push fear above 1, and a tiny pet still
-        // triggers a mild reaction (floor at 0.1 so fear never completely vanishes).
-        var sizeFactor    = Math.min(2, Math.max(0.1, other._cfg.scale / c.scale));
-        var effectiveFear = Math.min(1, c.petFear * sizeFactor);
-        // Trigger radius also grows with size — a horse is intimidating from further away
-        var scaledRadius  = petFearRadius * sizeFactor;
-        if (distToPet <= scaledRadius && effectiveFear > 0) {
-          var otherX = other._state.x;
-          var fleeTargetP = this._pickFleeTarget(x, otherX, effectiveFear, parentW);
-          s.movementTargetX  = fleeTargetP;
-          s.movementPauseUntil = 0;
-          s.distractionTargetX = null;
-          s.fleeUntil = ts + 500 + effectiveFear * 2000;
-          var fastPool_p = c.movementActions.filter(function(a) { return a.speedMultiplier >= 1.35; });
-          if (!fastPool_p.length) fastPool_p = c.movementActions;
-          var fap = fastPool_p[Math.floor(Math.random() * fastPool_p.length)];
-          s.movementAction    = fap.name;
-          s.movementSpeedMult = fap.speedMultiplier;
-          isFleeing = true;
-          break; // flee from nearest threat only
+        if (needsNewFlee) {
+          // Flee direction = opposite of cursor relative to rat centre
+          var fleeDir = (cx_f >= this._mouseX) ? 1 : -1;
+          var fleeDist = FEAR_RADIUS * 0.6 + Math.random() * parentW * 0.3;
+          s.fleeTargetX = Math.min(
+            Math.max(FEAR_MARGIN, x + fleeDir * fleeDist),
+            parentW - FEAR_MARGIN
+          );
+          s.fleeUntil = ts + 300 + Math.random() * 200;
+          // Always sprint when scared
+          var runAction = c.movementActions[c.movementActions.length - 1];
+          s.movementAction    = runAction ? runAction.name : s.movementAction;
+          s.movementSpeedMult = runAction ? runAction.speedMultiplier : s.movementSpeedMult;
         }
+
+        // Use the flee target instead of normal targeting
+        var fleeDiffX  = s.fleeTargetX - x;
+        var fleeDistX  = Math.abs(fleeDiffX) || 0.0001;
+        if (Math.abs(fleeDiffX) > 0.5) s.facingDir = fleeDiffX < 0 ? -1 : 1;
+        x += (fleeDiffX / fleeDistX) * c.speed * s.movementSpeedMult * 1.6;
+        x  = Math.min(Math.max(16, x), parentW - 16);
+        s.x = x;
+        // Bounce a little while panicking
+        if (c.jumpAmp > 0 || true) {
+          s.jumpPhase = (s.jumpPhase || 0) + 1.2;
+          this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * 6) + 'px';
+        }
+        s.idleAction      = c.idleActions[0] ? c.idleActions[0].name : 'idle';
+        s.idleActionUntil = 0;
+        this._setGif(s.movementAction);
+        this._applyFacing();
+        this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+        this._rafId = requestAnimationFrame(this._tick);
+        return;
+      } else {
+        // Outside fear radius — clear flee state
+        s.fleeTargetX = null;
+        s.fleeUntil   = 0;
       }
     }
 
-    // ── Normal targetX resolution (skipped while fleeing) ───────────────────
-    if (isFleeing) {
-      targetX = s.movementTargetX !== null ? s.movementTargetX : x;
-    } else if (c.followMouse && this._hasRealPointer) {
+    if (c.followMouse && this._hasRealPointer) {
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
         // Temporarily distracted — wander to a nearby spot, ignore the mouse
         targetX = s.distractionTargetX;
@@ -1077,7 +1043,7 @@
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
 
-    if (!isFleeing && this._hasRealPointer && distToMouse <= c.hoverDist) {
+    if (this._hasRealPointer && distToMouse <= c.hoverDist) {
       /* ── Hover state ── */
       // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
@@ -1131,10 +1097,7 @@
         // In free-roam mode, replaces movementTargetX directly.
         // In followMouse mode, sets a temporary distractionTargetX the pet wanders to before snapping back.
         if (c.distraction > 0 && Math.random() < c.distraction) {
-          if (isFleeing) {
-      // While fleeing, use the already-set movementTargetX as targetX
-      targetX = s.movementTargetX !== null ? s.movementTargetX : x;
-    } else if (c.followMouse && this._hasRealPointer) {
+          if (c.followMouse && this._hasRealPointer) {
             if (ts >= s.distractionUntil) {
               // Start a new distraction: pick a nearby random spot and a duration of 1–3 s
               var dMargin = 16;
@@ -1190,10 +1153,6 @@
 
   /** Stop animation and remove the pet from the DOM. */
   WebPet.prototype.destroy = function () {
-    // Remove from global registry
-    var idx = WebPet._registry.indexOf(this);
-    if (idx !== -1) WebPet._registry.splice(idx, 1);
-
     if (this._rafId) cancelAnimationFrame(this._rafId);
     document.removeEventListener('mousemove', this._onMouseMove);
     document.removeEventListener('mousemove', this._onDragMove);
@@ -1222,9 +1181,6 @@
   /** Reference to the full catalog (read-only). */
   WebPet.ANIMALS = ANIMALS;
 
-  /** Global registry of all live WebPet instances (used for petFear). */
-  WebPet._registry = [];
-
   /* ─────────────────────────────────────────────────────────────────────────
      Auto-init from <script data-animal="…"> attributes
   ───────────────────────────────────────────────────────────────────────── */
@@ -1252,8 +1208,6 @@
     if (ds.nervous)      opts.nervous      = ds.nervous === 'true';
     if (ds.lazy)         opts.lazy         = ds.lazy === 'true';
     if (ds.distraction)  opts.distraction  = parseFloat(ds.distraction);
-    if (ds.cursorFear)   opts.cursorFear   = parseFloat(ds.cursorFear);
-    if (ds.petFear)      opts.petFear      = parseFloat(ds.petFear);
 
     new WebPet(opts);
   }
