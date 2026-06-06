@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets a
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1670,6 +1670,7 @@
     var MAX_V  = 40;
     var velPxMsX = (this._mouseVX != null && isFinite(this._mouseVX)) ? this._mouseVX : 0;
     var velPxMsY = (this._mouseVY != null && isFinite(this._mouseVY)) ? this._mouseVY : 0;
+    s.isFalling = true;
     s.velX = Math.max(-MAX_V, Math.min(velPxMsX * SCALE, MAX_V));
     s.velY = Math.max(-MAX_V, Math.min(velPxMsY * SCALE, MAX_V));
 
