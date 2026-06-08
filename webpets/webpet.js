@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets!
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1351,11 +1351,20 @@
       }
     }
 
-    // Lazy ball-chasing lookup: if chasesObjects and no followEntity set yet, find first WebBall
-    if (c.chasesObjects && !c.followEntity) {
+    // Auto-targeting: latch onto a WebBall if this pet should chase it.
+    // Two routes:
+    //   chasesObjects — generic ball-chaser; picks the first WebBall in the list
+    //                   whose attractsAnimals is empty (generic ball) or includes this animal.
+    //   attractsAnimals — a ball variant can pull in specific animals even without chasesObjects.
+    if (!c.followEntity) {
       for (var ei = 0; ei < _allEntities.length; ei++) {
-        if (_allEntities[ei] instanceof WebBall) {
-          c.followEntity = _allEntities[ei].name;
+        var candidate = _allEntities[ei];
+        if (!(candidate instanceof WebBall)) continue;
+        var attracts = candidate._cfg.attractsAnimals;
+        var isAttracted  = attracts.length > 0 && attracts.indexOf(c.animal) !== -1;
+        var isGenericChaser = c.chasesObjects && attracts.length === 0;
+        if (isAttracted || isGenericChaser) {
+          c.followEntity = candidate.name;
           break;
         }
       }
@@ -1363,15 +1372,16 @@
 
     var followTarget = c.followEntity ? _resolveEntity(c.followEntity) : null;
 
-    // If the follow target is a WebBall that has nearly stopped, start a 5-second
-    // countdown. The pet keeps chasing during the countdown so it can reach the
-    // ball and sniff around. Only after the full delay does it lose interest and
-    // fall through to free-roam. If the ball moves again the countdown resets.
+    // If the follow target is a WebBall that has nearly stopped, start a countdown
+    // before losing interest. Duration scales with distraction: focused pets stay
+    // longer (up to ~15 s), scatterbrained pets wander off sooner (~2 s).
+    // The countdown resets whenever the ball starts moving again.
     if (followTarget && followTarget instanceof WebBall) {
       var bs = followTarget._state;
       var ballSpeed = Math.sqrt(bs.velX * bs.velX + bs.velY * bs.velY);
       var BALL_INTEREST_THRESHOLD = 1.5; // px/frame — below this the ball is "at rest"
-      var BALL_LOSE_INTEREST_MS   = 5000; // ms to keep chasing after ball goes still
+      // Less-distracted pets stay focused for longer. distraction=0 → 15 s, distraction=0.08+ → 2 s.
+      var BALL_LOSE_INTEREST_MS = 2000 + (1 - Math.min(c.distraction, 0.08) / 0.08) * 13000;
       if (bs.isDragged || ballSpeed >= BALL_INTEREST_THRESHOLD) {
         // Ball is moving (or being held) — reset the countdown
         s.ballLostInterestAt = null;
@@ -1552,6 +1562,25 @@
     this._rafId = requestAnimationFrame(this._tick);
   };
 
+  /* ── WebBall variants catalog ───────────────────────────────────────── */
+
+  /**
+   * Each entry defines one throwable object variant.
+   *   asset        — filename under mediaBase (no path prefix, no leading slash)
+   *   attractsAnimals — animal IDs that will auto-chase this object even without
+   *                  chasesObjects:true on their species. Empty = any chasesObjects pet.
+   */
+  var BALL_VARIANTS = {
+    ball: {
+      asset:          'ball.png',
+      attractsAnimals: [],          // generic — any chasesObjects pet will chase it
+    },
+    cheese: {
+      asset:          'cheese.png',
+      attractsAnimals: ['rat'],     // rats specifically seek out cheese
+    },
+  };
+
   /* ── WebBall — a physics ball that pets can chase ────────────────────── */
 
   function WebBall(options) {
@@ -1561,21 +1590,26 @@
     var ballName = options.name || ('ball-' + _entityCounts['ball']);
     this.name    = ballName;
 
-    var mediaBase = options.mediaBase || _defaultMediaBase;
-    var scale     = options.scale  != null ? +options.scale  : 0.5;
-    var zIndex    = options.zIndex != null ? +options.zIndex : 9999999998;
-    var position  = options.position || 'fixed';
-    var spriteW   = 64;
-    var spriteH   = 64;
+    var mediaBase   = options.mediaBase || _defaultMediaBase;
+    var scale       = options.scale   != null ? +options.scale   : 0.5;
+    var zIndex      = options.zIndex  != null ? +options.zIndex  : 9999999998;
+    var position    = options.position || 'fixed';
+    var variantId   = (options.variant && BALL_VARIANTS[options.variant]) ? options.variant : 'ball';
+    var variantSpec = BALL_VARIANTS[variantId];
+    var spriteW     = 64;
+    var spriteH     = 64;
 
     this._cfg = {
-      name:      ballName,
-      mediaBase: mediaBase,
-      scale:     scale,
-      position:  position,
-      zIndex:    zIndex,
-      spriteW:   spriteW,
-      spriteH:   spriteH,
+      name:            ballName,
+      mediaBase:       mediaBase,
+      scale:           scale,
+      position:        position,
+      zIndex:          zIndex,
+      spriteW:         spriteW,
+      spriteH:         spriteH,
+      variant:         variantId,
+      asset:           variantSpec.asset,
+      attractsAnimals: variantSpec.attractsAnimals,
     };
 
     var ballW     = spriteW * scale;
@@ -1662,7 +1696,7 @@
 
   WebBall.prototype._loadImg = async function () {
     var c   = this._cfg;
-    var url = c.mediaBase + '/ball.png';
+    var url = c.mediaBase + '/' + c.asset;
     if (this._blobCache[url]) { this._imgEl.src = this._blobCache[url]; return; }
     try {
       var cache    = await caches.open(CACHE);
