@@ -417,6 +417,7 @@
       position:      options.position || 'fixed',
       zIndex:        options.zIndex != null ? +options.zIndex : 9999,
       hoverMessage:  options.hoverMessage || '',
+      alwaysShowDisplay: options.alwaysShowDisplay ? true : false,
       spriteW:       100,
       spriteH:       100,
       movementActions: movementActions,
@@ -497,6 +498,10 @@
 
     this._buildDOM();
     this._start();
+    // Show bubble immediately if alwaysShowDisplay is set
+    if (this._cfg.alwaysShowDisplay && this._cfg.hoverMessage) {
+      this._bubbleEl.style.display = 'block';
+    }
   }
 
   /* ── Helpers ─────────────────────────────────────────────────────────── */
@@ -697,7 +702,9 @@
 
   WebPet.prototype._showBubble = function (visible) {
     if (!this._cfg.hoverMessage) return;
-    this._bubbleEl.style.display = visible ? 'block' : 'none';
+    // alwaysShowDisplay: bubble is always visible regardless of hover state
+    var show = visible || this._cfg.alwaysShowDisplay;
+    this._bubbleEl.style.display = show ? 'block' : 'none';
     this._state.isHovered = visible;
   };
 
@@ -808,6 +815,17 @@
     s.dragOffsetX   = rect.left - p.clientX;
     s.dragOffsetY   = rect.top  - p.clientY;
 
+    // Multi-drag: any other pet already being dragged joins this drag session,
+    // pinning its own offset relative to the current pointer position.
+    for (var _md = 0; _md < _allEntities.length; _md++) {
+      var _peer = _allEntities[_md];
+      if (_peer === this || !(_peer instanceof WebPet)) continue;
+      if (!_peer._state.isDragged) continue;
+      var _pr = _peer._wrapEl.getBoundingClientRect();
+      _peer._state.dragOffsetX = _pr.left - p.clientX;
+      _peer._state.dragOffsetY = _pr.top  - p.clientY;
+    }
+
     // Block selectstart so dragging over text doesn't highlight it
     this._onSelectStart = function (e) { e.preventDefault(); };
     document.addEventListener('selectstart', this._onSelectStart);
@@ -827,28 +845,26 @@
     if (e.type === 'touchmove') e.preventDefault();
 
     var p  = this._pointerCoords(e);
-    var s  = this._state;
-    var c  = this._cfg;
-    var w  = c.spriteW * c.scale;
-    var h  = c.spriteH * c.scale;
-
-    var newLeft = p.clientX + s.dragOffsetX;
-    var newTop  = p.clientY + s.dragOffsetY;
-
-    // Clamp to viewport
     var vw = window.innerWidth;
     var vh = window.innerHeight;
-    newLeft = Math.max(0, Math.min(newLeft, vw - w));
-    newTop  = Math.max(0, Math.min(newTop,  vh - h));
 
-    this._wrapEl.style.left = newLeft + 'px';
-    this._wrapEl.style.top  = newTop  + 'px';
+    // Move ALL currently-dragged pets (multi-drag gang)
+    for (var _mm = 0; _mm < _allEntities.length; _mm++) {
+      var _mp = _allEntities[_mm];
+      if (!(_mp instanceof WebPet) || !_mp._state.isDragged) continue;
+      var _ms  = _mp._state;
+      var _mc  = _mp._cfg;
+      var _mw  = _mc.spriteW * _mc.scale;
+      var _mh  = _mc.spriteH * _mc.scale;
+      var _ml  = Math.max(0, Math.min(p.clientX + _ms.dragOffsetX, vw - _mw));
+      var _mt  = Math.max(0, Math.min(p.clientY + _ms.dragOffsetY, vh - _mh));
+      _mp._wrapEl.style.left = _ml + 'px';
+      _mp._wrapEl.style.top  = _mt + 'px';
+      _ms.airX = _ml;
+      _ms.airY = _mt;
+    }
 
-    // Sync logical position so the pet doesn't teleport when it lands
-    s.airX = newLeft;
-    s.airY = newTop;
-
-    // Track velocity for fling — mirrors _onMouseMove so touch gets the same EMA
+    // Velocity tracking on this instance (used for fling on drag end)
     var now2 = performance.now();
     var dt2  = now2 - (this._lastMoveTime || now2);
     if (dt2 > 0 && dt2 < 100) {
@@ -870,56 +886,54 @@
     var c  = this._cfg;
     var h  = c.spriteH * c.scale;
 
-    s.isDragged = false;
-    this._wrapEl.style.cursor = 'grab';
-
-    // Restore selection behaviour
+    // Restore selection behaviour (only needed once per drag session)
     if (this._onSelectStart) {
       document.removeEventListener('selectstart', this._onSelectStart);
       this._onSelectStart = null;
     }
     document.body.style.userSelect = this._prevUserSelect || '';
 
-    var rect     = this._wrapEl.getBoundingClientRect();
-    var vh       = window.innerHeight;
-    var floorTop = vh - h;
-
-    // If already on the floor, just land immediately
-    if (rect.top >= floorTop) {
-      this._landPet(rect.left);
-      return;
-    }
-
+    // Compute shared fling velocity from this instance's pointer tracking
     var SCALE = 1.2 * 16.67;
     var MAX_V = 40;
-
-    // Heavier (larger) pets are harder to fling — weight scales with rendered area.
-    // Base is scale=0.5 (50×50px). A pet at scale=1.0 has 4× the area → half the velocity.
-    var renderedArea  = (c.spriteW * c.scale) * (c.spriteH * c.scale);
-    var baseArea      = (c.spriteW * 0.5)     * (c.spriteH * 0.5);
-    var weightFactor  = Math.sqrt(renderedArea / baseArea); // sqrt keeps it from being too punishing
-    var effectiveScale = SCALE / weightFactor;
-
+    var MIN_BOUNCE_VY = 3.5;
     var velPxMsX = (this._mouseVX != null && isFinite(this._mouseVX)) ? this._mouseVX : 0;
     var velPxMsY = (this._mouseVY != null && isFinite(this._mouseVY)) ? this._mouseVY : 0;
-    var velX = Math.max(-MAX_V, Math.min(velPxMsX * effectiveScale, MAX_V));
-    var velY = Math.max(-MAX_V, Math.min(velPxMsY * effectiveScale, MAX_V));
-
-    // If already on the floor AND no meaningful throw, just land immediately
-    var MIN_BOUNCE_VY = 3.5;
-    if (rect.top >= floorTop && Math.abs(velY) < MIN_BOUNCE_VY && Math.abs(velX) < MIN_BOUNCE_VY) {
-      this._landPet(rect.left);
-      return;
-    }
-
-    s.isFalling = true;
-    s.airX      = rect.left;
-    s.airY      = Math.min(rect.top, floorTop - 1); // ensure at least 1px above floor so bounce triggers
-    s.velX      = velX;
-    s.velY      = velY;
-    // Reset velocity trackers so stale values don't bleed into next pick-up
     this._mouseVX = null;
     this._mouseVY = null;
+
+    var vh = window.innerHeight;
+
+    // Release ALL dragged pets with the same throw velocity
+    for (var _me = 0; _me < _allEntities.length; _me++) {
+      var _ep = _allEntities[_me];
+      if (!(_ep instanceof WebPet) || !_ep._state.isDragged) continue;
+      var _es = _ep._state;
+      var _ec = _ep._cfg;
+      _es.isDragged = false;
+      _ep._wrapEl.style.cursor = 'grab';
+
+      var _rect     = _ep._wrapEl.getBoundingClientRect();
+      var _floorTop = vh - _ec.spriteH * _ec.scale;
+
+      // Weight-adjusted velocity per pet
+      var _renderedArea  = (_ec.spriteW * _ec.scale) * (_ec.spriteH * _ec.scale);
+      var _baseArea      = (_ec.spriteW * 0.5)        * (_ec.spriteH * 0.5);
+      var _weightFactor  = Math.sqrt(_renderedArea / _baseArea);
+      var _effScale      = SCALE / _weightFactor;
+      var _velX = Math.max(-MAX_V, Math.min(velPxMsX * _effScale, MAX_V));
+      var _velY = Math.max(-MAX_V, Math.min(velPxMsY * _effScale, MAX_V));
+
+      if (_rect.top >= _floorTop && Math.abs(_velY) < MIN_BOUNCE_VY && Math.abs(_velX) < MIN_BOUNCE_VY) {
+        _ep._landPet(_rect.left);
+      } else {
+        _es.isFalling = true;
+        _es.airX = _rect.left;
+        _es.airY = Math.min(_rect.top, _floorTop - 1);
+        _es.velX = _velX;
+        _es.velY = _velY;
+      }
+    }
   };
 
   /**
@@ -2117,6 +2131,7 @@
     if (ds.lazy)         opts.lazy         = ds.lazy === 'true';
     if (ds.distraction)  opts.distraction  = parseFloat(ds.distraction);
     if (ds.erratic)      opts.erratic      = ds.erratic === 'true';
+    if (ds.alwaysShowDisplay) opts.alwaysShowDisplay = ds.alwaysShowDisplay === 'true';
 
     new WebPet(opts);
   }
