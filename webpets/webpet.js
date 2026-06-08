@@ -1,4 +1,4 @@
-/**
+/**s
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -1052,6 +1052,7 @@
     var margin = 16;
     var wrapMargin = boundsW * 0.08;
     var maxX = boundsW + wrapMargin;
+    var minDist = this._cfg.idleDist + 4; // must move at least past idleDist or we idle immediately
 
     // Erratic pets: extremely short random bursts in any direction, ignoring spread awareness entirely
     if (this._cfg.erratic) {
@@ -1076,20 +1077,21 @@
     
       var spreadT = this._spreadTarget(x, boundsW);
     
+      var nervTarget;
       if (spreadT !== null && Math.random() < 0.6) {
         var nervDir  = spreadT > x ? 1 : -1;
-        var nervDist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
-    
-        this._state.movementTargetX =
-          Math.min(maxX, Math.max(margin, x + nervDir * nervDist));
+        var nervDist = Math.max(minDist, boundsW * 0.05 + Math.random() * boundsW * 0.12);
+        nervTarget = Math.min(maxX, Math.max(margin, x + nervDir * nervDist));
       } else {
-        var dist = boundsW * 0.05 + Math.random() * boundsW * 0.12;
-        var dir  = Math.random() < 0.5 ? -1 : 1;
-    
-        this._state.movementTargetX =
-          Math.min(maxX, Math.max(margin, x + dir * dist));
+        var ndist = Math.max(minDist, boundsW * 0.05 + Math.random() * boundsW * 0.12);
+        var ndir  = Math.random() < 0.5 ? -1 : 1;
+        nervTarget = Math.min(maxX, Math.max(margin, x + ndir * ndist));
       }
-    
+      // If clamping brought the target too close, flip direction and try the other side
+      if (Math.abs(nervTarget - x) < minDist) {
+        nervTarget = Math.min(maxX, Math.max(margin, x + (nervTarget < x ? 1 : -1) * minDist * 1.5));
+      }
+      this._state.movementTargetX = nervTarget;
       return;
     }
 
@@ -1100,9 +1102,9 @@
       return;
     }
 
-    var minDist = boundsW * 0.2;
-    var maxDist = boundsW * 0.55;
-    var dist    = minDist + Math.random() * Math.max(0, maxDist - minDist);
+    var minWalkDist = boundsW * 0.2;
+    var maxWalkDist = boundsW * 0.55;
+    var dist    = minWalkDist + Math.random() * Math.max(0, maxWalkDist - minWalkDist);
     var avL     = Math.max(0, x - margin);
     var avR     = Math.max(0, maxX - x);
     var dir;
@@ -1259,8 +1261,9 @@
             }
           }
 
-          // Suppress cursor-fear if an attracted object (e.g. cheese for rats) is
-          // very close — hunger wins over fear at short range.
+          // Suppress cursor-fear ONLY if an attracted object (e.g. cheese) is nearby
+          // AND the rat is still moving toward it (not yet idling next to it).
+          // Once the rat is nibbling at the cheese, the mouse should still scare it off.
           var SNATCH_RADIUS = 80;
           var suppressFear  = false;
           for (var sf_i = 0; sf_i < _allEntities.length; sf_i++) {
@@ -1271,7 +1274,10 @@
             var sf_r = sf_e._wrapEl.getBoundingClientRect();
             var sf_cx = sf_r.left + sf_r.width  / 2;
             var sf_cy = sf_r.top  + sf_r.height / 2;
-            if (Math.hypot(sf_cx - cx_f, sf_cy - cy_f) < SNATCH_RADIUS) {
+            var sf_dist = Math.hypot(sf_cx - cx_f, sf_cy - cy_f);
+            // Only suppress if rat is still approaching cheese (further than idleDist away).
+            // If the rat is already sitting on the cheese (sf_dist < idleDist), fear wins.
+            if (sf_dist < SNATCH_RADIUS && sf_dist >= c.idleDist) {
               suppressFear = true;
               break;
             }
@@ -1519,7 +1525,13 @@
     var isDistracted = followTarget !== null && c.distraction > 0 &&
                        ts < s.distractionUntil && s.distractionTargetX !== null;
 
-    if (this._hasRealPointer && distToMouse <= c.hoverDist && !isDistracted) {
+    // fearCursor animals (e.g. rats) don't do friendly hover — the cursor scares them.
+    // Skip hover entirely if the mouse is within their fear radius.
+    var isFearingCursor = c.fearCursor && this._hasRealPointer &&
+                          Math.hypot(this._mouseX - (wrapRect.left + wrapRect.width / 2),
+                                     this._mouseY - (wrapRect.top  + wrapRect.height / 2)) < (c.lazy ? 60 : 180);
+
+    if (this._hasRealPointer && distToMouse <= c.hoverDist && !isDistracted && !isFearingCursor) {
       /* ── Hover state ── */
       // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
