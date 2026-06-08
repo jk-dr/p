@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets!
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1359,6 +1359,17 @@
     }
 
     var followTarget = c.followEntity ? _resolveEntity(c.followEntity) : null;
+
+    // If the follow target is a WebBall that has nearly stopped, lose interest
+    // and fall through to normal free-roam behaviour.
+    if (followTarget && followTarget instanceof WebBall) {
+      var bs = followTarget._state;
+      var ballSpeed = Math.sqrt(bs.velX * bs.velX + bs.velY * bs.velY);
+      var BALL_INTEREST_THRESHOLD = 1.5; // px/frame — below this the ball is "at rest"
+      if (ballSpeed < BALL_INTEREST_THRESHOLD && !bs.isDragged) {
+        followTarget = null; // pretend there's no target; wander like a free-roam pet
+      }
+    }
 
     if (followTarget) {
       if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
