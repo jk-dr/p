@@ -1,4 +1,4 @@
-/**s
+/**
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -1560,17 +1560,13 @@
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
         if (!followTarget) {
-          // Clear any lingering nibble-suppression lock — it's only valid while the
-          // rat is actually next to cheese. Without this, a rat that previously nibbled
-          // keeps distractionUntil frozen far in the future and can't re-target.
+          // Clear any lingering nibble-suppression lock from a previous cheese visit.
           if (s.distractionUntil > ts + 10000) s.distractionUntil = 0;
-          if (s.movementTargetX !== null) {
-            s.movementTargetX = null;
-            this._scheduleMovementPause(ts);
-          } else if (ts >= s.movementPauseUntil) {
-            // Pause already expired and we have no target — pick one now so the
-            // rat doesn't freeze in idle indefinitely (happens when the idle branch
-            // fires every tick while the rat is already at rest with no pending target).
+          // If the pause has expired and there's no pending target, pick one now.
+          // NOTE: do NOT null movementTargetX here — arrival is handled in the moving
+          // branch. Nulling it here caused a permanent idle loop where every idle tick
+          // cancelled the target and rescheduled the pause endlessly.
+          if (s.movementTargetX === null && ts >= s.movementPauseUntil) {
             this._pickMovementAction();
             this._pickMovementTarget(x, parentW);
           }
@@ -1584,8 +1580,9 @@
           var nb_isGrounded = !nb_bs.isDragged && nb_ballSpeed < 1.5;
           var nb_isAttracted = followTarget._cfg.attractsAnimals.indexOf(c.animal) !== -1;
           if (nb_isGrounded && nb_isAttracted) {
-            // Use the swipe idle action — it looks like an excited nibble/paw motion
-            var nibbleAction = c.idleActions.length > 1 ? c.idleActions[1].name : c.idleActions[0].name;
+            // Use the hover/swipe action for nibbling — rats have 'swipe' as hoverAction
+            // but no swipe in idleActions, so we use hoverAction directly here.
+            var nibbleAction = c.hoverAction || (c.idleActions.length > 1 ? c.idleActions[1].name : c.idleActions[0].name);
             this._setGif(nibbleAction);
             this._applyFacing();
             this._hideGhost();
