@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets!
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1552,18 +1552,26 @@
       spriteH:   spriteH,
     };
 
-    var spawnX = window.innerWidth  * 0.3 + Math.random() * window.innerWidth  * 0.4;
-    var spawnY = window.innerHeight * 0.3 + Math.random() * window.innerHeight * 0.3;
+    var ballW     = spriteW * scale;
+    var ballH     = spriteH * scale;
+    var spawnMaxX = window.innerWidth  - ballW;
+    var spawnMaxY = window.innerHeight - ballH;
+    var spawnX = Math.max(0, window.innerWidth  * 0.3 + Math.random() * window.innerWidth  * 0.4);
+    var spawnY = Math.max(0, window.innerHeight * 0.3 + Math.random() * window.innerHeight * 0.3);
+    spawnX = Math.min(spawnX, spawnMaxX);
+    spawnY = Math.min(spawnY, spawnMaxY);
 
     this._state = {
-      airX:       spawnX,
-      airY:       spawnY,
-      velX:       (Math.random() - 0.5) * 4,
-      velY:       0,
-      isFalling:  true,
-      isDragged:  false,
+      airX:        spawnX,
+      airY:        spawnY,
+      velX:        (Math.random() - 0.5) * 4,
+      velY:        0,
+      isFalling:   true,
+      isDragged:   false,
       dragOffsetX: 0,
       dragOffsetY: 0,
+      rotation:    0,
+      angularVel:  0,
     };
 
     this._mouseVX        = null;
@@ -1614,6 +1622,7 @@
       'pointer-events:none',
       'image-rendering:pixelated',
       'image-rendering:crisp-edges',
+      'transform-origin:center center',
     ].join(';');
     img.draggable = false;
     this._imgEl = img;
@@ -1671,6 +1680,10 @@
       var BOUNCE_WALL  = 0.45;
       var MIN_BOUNCE   = 2.5;
       var MAX_FALL     = 30;
+      // Degrees per pixel of horizontal travel (tune to taste)
+      var ROT_RATE     = 1.8;
+      // Angular damping per frame
+      var ANG_DAMP     = 0.98;
 
       var w         = c.spriteW * c.scale;
       var h         = c.spriteH * c.scale;
@@ -1685,13 +1698,19 @@
       s.airX += s.velX;
       s.airY += s.velY;
 
+      // --- Rotation ---
+      // Angular velocity tracks horizontal movement
+      s.angularVel = s.velX * ROT_RATE;
+
       // Left/right walls
       if (s.airX <= 0) {
         s.airX = 0;
         s.velX = Math.abs(s.velX) * BOUNCE_WALL;
+        s.angularVel = -s.angularVel * BOUNCE_WALL;
       } else if (s.airX >= rightEdge) {
         s.airX = rightEdge;
         s.velX = -Math.abs(s.velX) * BOUNCE_WALL;
+        s.angularVel = -s.angularVel * BOUNCE_WALL;
       }
 
       // Ceiling
@@ -1706,16 +1725,22 @@
         if (s.velY > MIN_BOUNCE) {
           s.velY = -s.velY * BOUNCE_FLOOR;
           s.velX =  s.velX * BOUNCE_FLOOR;
+          s.angularVel = s.velX * ROT_RATE;
         } else {
           s.velY = 0;
           // Rolling friction when on floor
           s.velX *= 0.985;
           if (Math.abs(s.velX) < 0.3) s.velX = 0;
+          s.angularVel *= ANG_DAMP;
+          if (Math.abs(s.angularVel) < 0.1) s.angularVel = 0;
         }
       }
 
+      s.rotation += s.angularVel;
+
       this._wrapEl.style.left = s.airX + 'px';
       this._wrapEl.style.top  = s.airY + 'px';
+      this._imgEl.style.transform = 'rotate(' + s.rotation.toFixed(2) + 'deg)';
     } catch (e) {
       console.error('[WebBall] tick error:', e);
     }
@@ -1741,6 +1766,7 @@
     s.isDragged    = true;
     s.velX         = 0;
     s.velY         = 0;
+    s.angularVel   = 0;
     s.dragOffsetX  = rect.left - p.clientX;
     s.dragOffsetY  = rect.top  - p.clientY;
 
