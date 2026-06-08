@@ -1,4 +1,4 @@
-/**s
+/**
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -176,6 +176,7 @@
       hover: 'swipe',
       // Rats are skittish — erratic dashes, high flip chance, TERRIFIED of cursor and bigger animals
       behaviour: { nervous: true, flipChance: 0.18, distraction: 0.08, fearCursor: true, fearOthers: true },
+      noIdle: true,  // rats never stop — they wander or eat cheese, nothing in between
       fearSize: 1,  // tiny prey — scared of almost everything
     },
     rocky: {
@@ -431,6 +432,7 @@
       fearOthers:  specBeh.fearOthers  || false,
       fearSize:    spec.fearSize       != null ? spec.fearSize : 3,
       chasesObjects: (specBeh.chasesObjects && options.followEntity == null) ? true : false,
+      noIdle:      options.noIdle != null ? !!options.noIdle : (spec.noIdle ? true : false),
     };
 
     this.name = entityName;
@@ -1565,13 +1567,16 @@
           if (s.movementTargetX !== null) {
             // Target is set but we're already idle — it was too close for the moving
             // branch's arrival check to fire (that only runs when idle=false).
-            // Null it once and pause; the else-branch below will pick a fresh target
-            // after the pause expires. Fires exactly once per arrival since
-            // movementTargetX is null on every subsequent idle tick.
             s.movementTargetX = null;
-            this._scheduleMovementPause(ts);
-          } else if (ts >= s.movementPauseUntil) {
-            // Pause expired and no target — pick a fresh destination now.
+            if (c.noIdle) {
+              // No idling — pick the next target immediately.
+              this._pickMovementAction();
+              this._pickMovementTarget(x, parentW);
+            } else {
+              this._scheduleMovementPause(ts);
+            }
+          } else if (c.noIdle || ts >= s.movementPauseUntil) {
+            // noIdle: always pick immediately. Otherwise: pick once the pause expires.
             this._pickMovementAction();
             this._pickMovementTarget(x, parentW);
           }
@@ -1598,12 +1603,14 @@
           }
         }
 
-        if (ts > s.idleCooldownUntil && ts > s.idleActionUntil) {
-          this._pickIdleAction(ts);
+        if (!c.noIdle) {
+          if (ts > s.idleCooldownUntil && ts > s.idleActionUntil) {
+            this._pickIdleAction(ts);
+          }
+          this._setGif(s.idleAction);
+          this._applyFacing();
+          this._hideGhost();
         }
-        this._setGif(s.idleAction);
-        this._applyFacing();
-        this._hideGhost();
 
       } else {
         /* ── Moving state ── */
@@ -1672,7 +1679,13 @@
 
         if (!followTarget && s.movementTargetX !== null && distX <= c.idleDist) {
           s.movementTargetX = null;
-          this._scheduleMovementPause(ts);
+          if (c.noIdle) {
+            // No idling — pick the next target immediately so the pet keeps moving.
+            this._pickMovementAction();
+            this._pickMovementTarget(x, parentW);
+          } else {
+            this._scheduleMovementPause(ts);
+          }
         }
 
         // Reset idle timer while moving
