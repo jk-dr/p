@@ -1221,6 +1221,28 @@
             }
           }
 
+          // Suppress cursor-fear if an attracted object (e.g. cheese for rats) is
+          // very close — hunger wins over fear at short range.
+          var SNATCH_RADIUS = 80;
+          var suppressFear  = false;
+          for (var sf_i = 0; sf_i < _allEntities.length; sf_i++) {
+            var sf_e = _allEntities[sf_i];
+            if (!(sf_e instanceof WebBall)) continue;
+            var sf_a = sf_e._cfg.attractsAnimals;
+            if (sf_a.length === 0 || sf_a.indexOf(c.animal) === -1) continue;
+            var sf_r = sf_e._wrapEl.getBoundingClientRect();
+            var sf_cx = sf_r.left + sf_r.width  / 2;
+            var sf_cy = sf_r.top  + sf_r.height / 2;
+            if (Math.hypot(sf_cx - cx_f, sf_cy - cy_f) < SNATCH_RADIUS) {
+              suppressFear = true;
+              break;
+            }
+          }
+          if (suppressFear) {
+            s.fleeTargetX = null;
+            s.fleeUntil   = 0;
+            // fall through to normal chase logic below
+          } else {
           // Use the flee target instead of normal targeting
           var fleeDiffX  = s.fleeTargetX - x;
           var fleeDistX  = Math.abs(fleeDiffX) || 0.0001;
@@ -1250,6 +1272,7 @@
           this._syncGhost(x, x - spriteW / 2, parentW);
           this._rafId = requestAnimationFrame(this._tick);
           return;
+          } // end !suppressFear
         }
       } else {
         // Outside fear radius — clear flee state
@@ -1351,26 +1374,37 @@
       }
     }
 
-    // Auto-targeting: latch onto a WebBall if this pet should chase it.
-    // Two routes:
-    //   chasesObjects — generic ball-chaser; picks the first WebBall in the list
-    //                   whose attractsAnimals is empty (generic ball) or includes this animal.
-    //   attractsAnimals — a ball variant can pull in specific animals even without chasesObjects.
-    if (!c.followEntity) {
-      for (var ei = 0; ei < _allEntities.length; ei++) {
-        var candidate = _allEntities[ei];
-        if (!(candidate instanceof WebBall)) continue;
-        var attracts = candidate._cfg.attractsAnimals;
-        var isAttracted  = attracts.length > 0 && attracts.indexOf(c.animal) !== -1;
-        var isGenericChaser = c.chasesObjects && attracts.length === 0;
-        if (isAttracted || isGenericChaser) {
-          c.followEntity = candidate.name;
-          break;
-        }
+    // Auto-targeting: resolve which WebBall (if any) this pet should chase this tick.
+    // Attracted targets (e.g. cheese → rat) are re-evaluated every tick so they can
+    // override a previously latched generic target and react to new balls appearing.
+    // Generic chasers (chasesObjects) still latch permanently via c.followEntity.
+    var followTarget = null;
+
+    // First: check for an attracted object — these always win over generic chasing.
+    for (var ei = 0; ei < _allEntities.length; ei++) {
+      var candidate = _allEntities[ei];
+      if (!(candidate instanceof WebBall)) continue;
+      var attracts = candidate._cfg.attractsAnimals;
+      if (attracts.length > 0 && attracts.indexOf(c.animal) !== -1) {
+        followTarget = candidate;
+        break;
       }
     }
 
-    var followTarget = c.followEntity ? _resolveEntity(c.followEntity) : null;
+    // Second: fall back to the permanent generic-chaser latch (chasesObjects).
+    if (!followTarget) {
+      if (!c.followEntity) {
+        for (var ei2 = 0; ei2 < _allEntities.length; ei2++) {
+          var cand2 = _allEntities[ei2];
+          if (!(cand2 instanceof WebBall)) continue;
+          if (c.chasesObjects && cand2._cfg.attractsAnimals.length === 0) {
+            c.followEntity = cand2.name;
+            break;
+          }
+        }
+      }
+      followTarget = c.followEntity ? _resolveEntity(c.followEntity) : null;
+    }
 
     // If the follow target is a WebBall that has nearly stopped, start a countdown
     // before losing interest. Duration scales with distraction: focused pets stay
