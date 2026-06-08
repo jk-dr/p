@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets!
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -394,10 +394,8 @@
     if (beh.flipChance === null) beh.flipChance = beh.nervous ? 0.15 : 0;
     // erratic: crank everything to 11 — overrides individual flags unless the user set them explicitly
     if (isErratic) {
-      if (options.jumpy      == null) beh.jumpy      = 12;
-      if (options.wobble     == null) beh.wobble     = 18;
-      if (options.flipChance == null) beh.flipChance = 0.45;
-      if (options.nervous    == null) beh.nervous    = true;
+      if (options.flipChance  == null) beh.flipChance  = 0.45;
+      if (options.nervous     == null) beh.nervous     = true;
       if (options.distraction == null) beh.distraction = 0.18;
     }
 
