@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets!
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1409,18 +1409,29 @@
     // If the follow target is a WebBall that has nearly stopped, start a countdown
     // before losing interest. Duration scales with distraction: focused pets stay
     // longer (up to ~15 s), scatterbrained pets wander off sooner (~2 s).
+    // Exception: if this ball specifically attracts this animal (e.g. cheese → rat),
+    // the pet is ALWAYS interested when the cheese is grounded — they'll nibble on it.
     // The countdown resets whenever the ball starts moving again.
     if (followTarget && followTarget instanceof WebBall) {
       var bs = followTarget._state;
       var ballSpeed = Math.sqrt(bs.velX * bs.velX + bs.velY * bs.velY);
       var BALL_INTEREST_THRESHOLD = 1.5; // px/frame — below this the ball is "at rest"
+      // Cheese (and other attracted-object) targets: never lose interest while grounded.
+      var isAttractedTarget = followTarget._cfg.attractsAnimals.indexOf(c.animal) !== -1;
       // Less-distracted pets stay focused for longer. distraction=0 → 15 s, distraction=0.08+ → 2 s.
       var BALL_LOSE_INTEREST_MS = 2000 + (1 - Math.min(c.distraction, 0.08) / 0.08) * 13000;
       if (bs.isDragged || ballSpeed >= BALL_INTEREST_THRESHOLD) {
-        // Ball is moving (or being held) — reset the countdown
+        // Ball is moving (or being held) — reset the countdown.
+        // Also clear the nibble-distraction lock so the rat can react (flee/chase) normally.
+        s.ballLostInterestAt = null;
+        if (isAttractedTarget && s.distractionUntil > ts + 5000) {
+          s.distractionUntil = 0; // unlock from nibble suppression
+        }
+      } else if (isAttractedTarget) {
+        // Attracted target (e.g. cheese for rats) is at rest — always stay interested, never drop it.
         s.ballLostInterestAt = null;
       } else {
-        // Ball is still — start the countdown if not already started
+        // Generic ball is still — start the countdown if not already started
         if (s.ballLostInterestAt === null) {
           s.ballLostInterestAt = ts;
         } else if (ts - s.ballLostInterestAt >= BALL_LOSE_INTEREST_MS) {
@@ -1503,6 +1514,27 @@
             this._scheduleMovementPause(ts);
           }
         }
+
+        // ── Nibbling: if next to a grounded attracted target (e.g. cheese for rats),
+        //    play the swipe/nibble animation and suppress distraction so they stay put.
+        if (followTarget && followTarget instanceof WebBall) {
+          var nb_bs = followTarget._state;
+          var nb_ballSpeed = Math.sqrt(nb_bs.velX * nb_bs.velX + nb_bs.velY * nb_bs.velY);
+          var nb_isGrounded = !nb_bs.isDragged && nb_ballSpeed < 1.5;
+          var nb_isAttracted = followTarget._cfg.attractsAnimals.indexOf(c.animal) !== -1;
+          if (nb_isGrounded && nb_isAttracted) {
+            // Use the swipe idle action — it looks like an excited nibble/paw motion
+            var nibbleAction = c.idleActions.length > 1 ? c.idleActions[1].name : c.idleActions[0].name;
+            this._setGif(nibbleAction);
+            this._applyFacing();
+            this._hideGhost();
+            // Suppress distraction so the rat doesn't wander away mid-nibble
+            s.distractionUntil = ts + 9999999;
+            this._rafId = requestAnimationFrame(this._tick);
+            return;
+          }
+        }
+
         if (ts > s.idleCooldownUntil && ts > s.idleActionUntil) {
           this._pickIdleAction(ts);
         }
