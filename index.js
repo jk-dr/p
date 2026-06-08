@@ -93,7 +93,8 @@ class Config {
               '  wp.animals()  wp.list()\n' +
               '  wp.pop()      wp.clear()\n' +
               '  wp.pause()    wp.resume()\n' +
-              '  wp.ball       wp.popBall()\n',
+              '  wp.balls      wp.ball\n' +
+              '  wp.popBall()  wp.clearBalls()\n',
               'color:#818cf8;font-weight:bold','color:#94a3b8'
             ); return this;
           }
@@ -110,25 +111,48 @@ class Config {
       }
 
       if (hasBall) {
-        const ball = new WebBall({ mediaBase: MEDIA });
-        console.log('%c🎾 +ball', 'color:#818cf8');
+        // webball config can be:
+        //   true               — default ball
+        //   { variant: '...' } — specific variant (e.g. 'cheese')
+        //   [{ variant }, ...] — multiple balls at once
+        const ballConfigs = Array.isArray(this.data.webball)
+          ? this.data.webball
+          : (this.data.webball === true ? [{}] : [this.data.webball]);
+
+        const _balls = [];
+        for (const cfg of ballConfigs) {
+          const ball = new WebBall({ mediaBase: MEDIA, ...cfg });
+          _balls.push(ball);
+          const label = cfg.variant || 'ball';
+          console.log(`%c🎾 +${label}`, 'color:#818cf8');
+        }
 
         const wp = window.wp = window.wp || {};
-        wp.ball = ball;
+        wp.balls = _balls;
+        // wp.ball keeps a reference to the first ball for backwards compat
+        wp.ball = _balls[0] ?? null;
+
         wp.popBall = function () {
-          if (wp.ball) {
-            wp.ball.destroy();
-            wp.ball = null;
+          const ball = _balls.pop();
+          if (ball) {
+            ball.destroy();
+            wp.ball = _balls[0] ?? null;
             console.log('%c💨 ball removed', 'color:#f87171');
           } else {
-            console.log('no ball');
+            console.log('no balls');
           }
           return wp;
         };
 
-        ball._rafId = requestAnimationFrame(ball._tick);
+        wp.clearBalls = function () {
+          _balls.forEach(b => b.destroy());
+          _balls.length = 0;
+          wp.ball = null;
+          console.log('%c🧹 all balls cleared', 'color:#f87171');
+          return wp;
+        };
 
-        console.log('%c✓ webball loaded', 'color:#22c55e;font-weight:bold');
+        console.log(`%c✓ webball loaded (${_balls.length})`, 'color:#22c55e;font-weight:bold');
       }
 
     } catch (e) {
