@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets!
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -172,7 +172,7 @@
       speed: 4.9, defaultColor: 'brown',
       colors: ['brown', 'gray', 'white'],
       movement: ['walk', 'walk_fast', 'run'],
-      idle: ['idle', 'swipe'],
+      idle: ['idle'],
       hover: 'swipe',
       // Rats are skittish — erratic dashes, high flip chance, TERRIFIED of cursor and bigger animals
       behaviour: { nervous: true, flipChance: 0.18, distraction: 0.08, fearCursor: true, fearOthers: true },
@@ -973,7 +973,15 @@
   WebPet.prototype._pickIdleAction = function (ts) {
     var actions = this._cfg.idleActions;
     if (!actions.length) return;
-    var a = actions[Math.floor(Math.random() * actions.length)];
+    // Weight heavily toward the first action (plain 'idle') — non-idle actions like
+    // 'swipe' are fun occasionally but shouldn't dominate. 80% chance of idle,
+    // remaining 20% split evenly across the rest.
+    var a;
+    if (actions.length === 1 || Math.random() < 0.8) {
+      a = actions[0];
+    } else {
+      a = actions[1 + Math.floor(Math.random() * (actions.length - 1))];
+    }
     this._state.idleAction       = a.name;
     this._state.idleActionUntil  = ts + a.baseDuration + Math.random() * a.extraDuration;
     this._state.idleCooldownUntil = this._state.idleActionUntil + this._cfg.idlePauseMs.min / 8;
