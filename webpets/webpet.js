@@ -1548,9 +1548,19 @@
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
         if (!followTarget) {
+          // Clear any lingering nibble-suppression lock — it's only valid while the
+          // rat is actually next to cheese. Without this, a rat that previously nibbled
+          // keeps distractionUntil frozen far in the future and can't re-target.
+          if (s.distractionUntil > ts + 10000) s.distractionUntil = 0;
           if (s.movementTargetX !== null) {
             s.movementTargetX = null;
             this._scheduleMovementPause(ts);
+          } else if (ts >= s.movementPauseUntil) {
+            // Pause already expired and we have no target — pick one now so the
+            // rat doesn't freeze in idle indefinitely (happens when the idle branch
+            // fires every tick while the rat is already at rest with no pending target).
+            this._pickMovementAction();
+            this._pickMovementTarget(x, parentW);
           }
         }
 
