@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets!
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -465,6 +465,9 @@
       // Downward velocity in px per logic step (positive = down)
       velY:                   0,
       velX:                   0,
+      // Timestamp (ms) when the chased ball's speed first dropped below the threshold;
+      // null means the ball is still moving fast enough to hold interest.
+      ballLostInterestAt:     null,
     };
 
     this._mouseX = window.innerWidth  / 2;
@@ -1360,14 +1363,26 @@
 
     var followTarget = c.followEntity ? _resolveEntity(c.followEntity) : null;
 
-    // If the follow target is a WebBall that has nearly stopped, lose interest
-    // and fall through to normal free-roam behaviour.
+    // If the follow target is a WebBall that has nearly stopped, start a 5-second
+    // countdown. The pet keeps chasing during the countdown so it can reach the
+    // ball and sniff around. Only after the full delay does it lose interest and
+    // fall through to free-roam. If the ball moves again the countdown resets.
     if (followTarget && followTarget instanceof WebBall) {
       var bs = followTarget._state;
       var ballSpeed = Math.sqrt(bs.velX * bs.velX + bs.velY * bs.velY);
       var BALL_INTEREST_THRESHOLD = 1.5; // px/frame — below this the ball is "at rest"
-      if (ballSpeed < BALL_INTEREST_THRESHOLD && !bs.isDragged) {
-        followTarget = null; // pretend there's no target; wander like a free-roam pet
+      var BALL_LOSE_INTEREST_MS   = 5000; // ms to keep chasing after ball goes still
+      if (bs.isDragged || ballSpeed >= BALL_INTEREST_THRESHOLD) {
+        // Ball is moving (or being held) — reset the countdown
+        s.ballLostInterestAt = null;
+      } else {
+        // Ball is still — start the countdown if not already started
+        if (s.ballLostInterestAt === null) {
+          s.ballLostInterestAt = ts;
+        } else if (ts - s.ballLostInterestAt >= BALL_LOSE_INTEREST_MS) {
+          // Countdown elapsed — drop the target for this tick
+          followTarget = null;
+        }
       }
     }
 
