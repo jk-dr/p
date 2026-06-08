@@ -1,4 +1,4 @@
-/**
+/**s
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -1562,11 +1562,16 @@
         if (!followTarget) {
           // Clear any lingering nibble-suppression lock from a previous cheese visit.
           if (s.distractionUntil > ts + 10000) s.distractionUntil = 0;
-          // If the pause has expired and there's no pending target, pick one now.
-          // NOTE: do NOT null movementTargetX here — arrival is handled in the moving
-          // branch. Nulling it here caused a permanent idle loop where every idle tick
-          // cancelled the target and rescheduled the pause endlessly.
-          if (s.movementTargetX === null && ts >= s.movementPauseUntil) {
+          if (s.movementTargetX !== null) {
+            // Target is set but we're already idle — it was too close for the moving
+            // branch's arrival check to fire (that only runs when idle=false).
+            // Null it once and pause; the else-branch below will pick a fresh target
+            // after the pause expires. Fires exactly once per arrival since
+            // movementTargetX is null on every subsequent idle tick.
+            s.movementTargetX = null;
+            this._scheduleMovementPause(ts);
+          } else if (ts >= s.movementPauseUntil) {
+            // Pause expired and no target — pick a fresh destination now.
             this._pickMovementAction();
             this._pickMovementTarget(x, parentW);
           }
