@@ -127,31 +127,44 @@ class Config {
           console.log(`%c🎾 +${label}`, 'color:#818cf8');
         }
 
+        const wb = window.wb = {
+          resume() {
+            _balls.forEach(b => { if (!b._rafId) b._rafId = requestAnimationFrame(b._tick); });
+            console.log('%c▶ balls resumed', 'color:#22c55e');
+            return this;
+          },
+          pause() {
+            _balls.forEach(b => { if (b._rafId) { cancelAnimationFrame(b._rafId); b._rafId = null; } });
+            console.log('%c⏸ balls paused', 'color:#fbbf24');
+            return this;
+          },
+          pop() {
+            const ball = _balls.pop();
+            if (ball) {
+              ball.destroy();
+              console.log('%c💨 ball removed', 'color:#f87171');
+            } else {
+              console.log('no balls');
+            }
+            return this;
+          },
+          clear() {
+            _balls.forEach(b => b.destroy());
+            _balls.length = 0;
+            console.log('%c🧹 all balls cleared', 'color:#f87171');
+            return this;
+          },
+        };
+
         const wp = window.wp = window.wp || {};
         wp.balls = _balls;
         // wp.ball keeps a reference to the first ball for backwards compat
         wp.ball = _balls[0] ?? null;
+        // Legacy helpers delegate to wb
+        wp.popBall    = () => (wb.pop(),    (wp.ball = _balls[0] ?? null), wp);
+        wp.clearBalls = () => (wb.clear(),  (wp.ball = null),              wp);
 
-        wp.popBall = function () {
-          const ball = _balls.pop();
-          if (ball) {
-            ball.destroy();
-            wp.ball = _balls[0] ?? null;
-            console.log('%c💨 ball removed', 'color:#f87171');
-          } else {
-            console.log('no balls');
-          }
-          return wp;
-        };
-
-        wp.clearBalls = function () {
-          _balls.forEach(b => b.destroy());
-          _balls.length = 0;
-          wp.ball = null;
-          console.log('%c🧹 all balls cleared', 'color:#f87171');
-          return wp;
-        };
-
+        wb.resume();
         console.log(`%c✓ webball loaded (${_balls.length})`, 'color:#22c55e;font-weight:bold');
       }
 
