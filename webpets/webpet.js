@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets!
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -381,6 +381,7 @@
 
     // Merge species behaviour defaults under user-supplied options (user wins).
     var specBeh = spec.behaviour || {};
+    var isErratic = options.erratic != null ? !!options.erratic : (specBeh.erratic != null ? !!specBeh.erratic : false);
     var beh = {
       jumpy:      options.jumpy      != null ? options.jumpy      : (specBeh.jumpy      != null ? specBeh.jumpy      : false),
       wobble:     options.wobble     != null ? options.wobble     : (specBeh.wobble     != null ? specBeh.wobble     : false),
@@ -391,13 +392,22 @@
     };
     // flipChance: if not set by user or species, derive from nervous
     if (beh.flipChance === null) beh.flipChance = beh.nervous ? 0.15 : 0;
+    // erratic: crank everything to 11 — overrides individual flags unless the user set them explicitly
+    if (isErratic) {
+      if (options.jumpy      == null) beh.jumpy      = 12;
+      if (options.wobble     == null) beh.wobble     = 18;
+      if (options.flipChance == null) beh.flipChance = 0.45;
+      if (options.nervous    == null) beh.nervous    = true;
+      if (options.distraction == null) beh.distraction = 0.18;
+    }
 
     this._cfg = {
       animal:        animalId,
       color:         color,
       mediaBase:     options.mediaBase || _defaultMediaBase,
       scale:         options.scale    != null ? +options.scale    : 0.5,
-      speed:         options.speed    != null ? +options.speed    : spec.speed,
+      speed:         options.speed    != null ? +options.speed    : (isErratic ? spec.speed * 2.2 : spec.speed),
+      erratic:       isErratic,
       idleDist:      options.idleDist != null ? +options.idleDist : 48,
       hoverDist:     options.hoverDist != null ? +options.hoverDist : 50,
       hoverAction:   hoverAction,
@@ -974,7 +984,7 @@
   WebPet.prototype._scheduleMovementPause = function (ts) {
     var p    = this._cfg.idlePauseMs;
     // lazy: very long pauses; nervous: very short pauses (lots of quick dashes)
-    var mult = this._cfg.lazy ? 4.0 : (this._cfg.nervous ? 0.25 : 1.0);
+    var mult = this._cfg.lazy ? 4.0 : (this._cfg.erratic ? 0.05 : (this._cfg.nervous ? 0.25 : 1.0));
     this._state.movementPauseUntil = ts + (p.min + Math.random() * Math.max(0, p.max - p.min)) * mult;
   };
 
@@ -1022,6 +1032,14 @@
     var margin = 16;
     var wrapMargin = boundsW * 0.08;
     var maxX = boundsW + wrapMargin;
+
+    // Erratic pets: extremely short random bursts in any direction, ignoring spread awareness entirely
+    if (this._cfg.erratic) {
+      var eDist = boundsW * 0.03 + Math.random() * boundsW * 0.08;
+      var eDir  = Math.random() < 0.5 ? -1 : 1;
+      this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + eDir * eDist));
+      return;
+    }
 
     // Nervous pets take short, erratic dashes rather than long walks —
     // but still prefer emptier areas when bunching is detected.
@@ -2098,6 +2116,7 @@
     if (ds.nervous)      opts.nervous      = ds.nervous === 'true';
     if (ds.lazy)         opts.lazy         = ds.lazy === 'true';
     if (ds.distraction)  opts.distraction  = parseFloat(ds.distraction);
+    if (ds.erratic)      opts.erratic      = ds.erratic === 'true';
 
     new WebPet(opts);
   }
