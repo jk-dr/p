@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets
+ * webpet.js — Standalone, zero-dependency web pets!
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1665,6 +1665,7 @@
     var variantSpec = BALL_VARIANTS[variantId];
     var spriteW     = 64;
     var spriteH     = 64;
+    var selectThrough = options.selectThrough ? true : false;
 
     this._cfg = {
       name:            ballName,
@@ -1677,6 +1678,7 @@
       variant:         variantId,
       asset:           variantSpec.asset,
       attractsAnimals: variantSpec.attractsAnimals,
+      selectThrough:   selectThrough,
     };
 
     var ballW     = spriteW * scale;
@@ -1736,10 +1738,12 @@
       'width:'      + w + 'px',
       'height:'     + h + 'px',
       'z-index:'    + c.zIndex,
-      'pointer-events:auto',
-      'cursor:grab',
+      // selectThrough: pointer-events off so clicks pass through to elements below;
+      // dragging is handled via the document-level _onDocMouseDown listener instead.
+      c.selectThrough ? 'pointer-events:none' : 'pointer-events:auto',
+      c.selectThrough ? '' : 'cursor:grab',
       'user-select:none',
-    ].join(';');
+    ].filter(Boolean).join(';');
     this._wrapEl = wrap;
 
     var img = document.createElement('img');
@@ -1784,14 +1788,42 @@
   };
 
   WebBall.prototype._start = function () {
-    this._wrapEl.addEventListener('mousedown',  this._onDragStart);
-    this._wrapEl.addEventListener('touchstart', this._onDragStart, { passive: false });
+    if (this._cfg.selectThrough) {
+      // selectThrough: the wrap has pointer-events:none so it won't receive events.
+      // Instead we listen on the document and manually hit-test against our rect.
+      this._onDocMouseDown = this._onDocMouseDown.bind(this);
+      this._onDocTouchStart = this._onDocTouchStart.bind(this);
+      document.addEventListener('mousedown',  this._onDocMouseDown);
+      document.addEventListener('touchstart', this._onDocTouchStart, { passive: false });
+    } else {
+      this._wrapEl.addEventListener('mousedown',  this._onDragStart);
+      this._wrapEl.addEventListener('touchstart', this._onDragStart, { passive: false });
+    }
     document.addEventListener('mousemove',  this._onDragMove);
     document.addEventListener('mouseup',    this._onDragEnd);
     document.addEventListener('touchmove',  this._onDragMove,  { passive: false });
     document.addEventListener('touchend',   this._onDragEnd);
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       this._rafId = requestAnimationFrame(this._tick);
+    }
+  };
+
+  WebBall.prototype._onDocMouseDown = function (e) {
+    if (e.button !== 0) return;
+    var p    = this._pointerCoords(e);
+    var rect = this._wrapEl.getBoundingClientRect();
+    if (p.clientX >= rect.left && p.clientX <= rect.right &&
+        p.clientY >= rect.top  && p.clientY <= rect.bottom) {
+      this._onDragStart(e);
+    }
+  };
+
+  WebBall.prototype._onDocTouchStart = function (e) {
+    var p    = this._pointerCoords(e);
+    var rect = this._wrapEl.getBoundingClientRect();
+    if (p.clientX >= rect.left && p.clientX <= rect.right &&
+        p.clientY >= rect.top  && p.clientY <= rect.bottom) {
+      this._onDragStart(e);
     }
   };
 
@@ -1983,6 +2015,10 @@
     document.removeEventListener('mouseup',   this._onDragEnd);
     document.removeEventListener('touchmove', this._onDragMove);
     document.removeEventListener('touchend',  this._onDragEnd);
+    if (this._cfg.selectThrough) {
+      document.removeEventListener('mousedown',  this._onDocMouseDown);
+      document.removeEventListener('touchstart', this._onDocTouchStart);
+    }
     if (this._onSelectStart) {
       document.removeEventListener('selectstart', this._onSelectStart);
       this._onSelectStart = null;
