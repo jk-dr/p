@@ -1,5 +1,5 @@
 /**
- * webpet.js — Standalone, zero-dependency web pets!
+ * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
  *
@@ -1292,6 +1292,7 @@
       for (var pi = 0; pi < _allEntities.length; pi++) {
         var peer = _allEntities[pi];
         if (peer === this) continue;
+        if (peer instanceof WebBall) continue; // balls are objects, not threats
         var peerSize = peer._cfg.fearSize != null ? peer._cfg.fearSize : 3;
         var sizeDiff = peerSize - mySize;
         if (sizeDiff <= 0) continue; // only scared of bigger animals
@@ -1767,14 +1768,17 @@
     try {
       var cache    = await caches.open(CACHE);
       var response = await cache.match(url);
-      if (!response) {
-        response = await fetch(url, { mode: 'cors' });
+      if (!response || !response.ok) {
+        if (response) await cache.delete(url); // evict any bad cached response
+        response = await fetch(url);
+        if (!response.ok) throw new Error('HTTP ' + response.status + ' fetching ' + url);
         await cache.put(url, response.clone());
       }
       var blobUrl = URL.createObjectURL(await response.blob());
       this._blobCache[url] = blobUrl;
       this._imgEl.src = blobUrl;
     } catch (e) {
+      console.error('[WebBall] failed to load asset:', url, e);
       this._imgEl.src = url; // fallback to direct URL
     }
   };
