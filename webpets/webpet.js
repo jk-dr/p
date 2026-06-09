@@ -1596,9 +1596,13 @@
             console.warn('[webpet:' + this.name + '] IDLE STALL — noIdle=' + c.noIdle + ' but waiting for pause! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms');
           }
         } else if (c.noIdle) {
-          // followTarget is set AND idle=true AND noIdle=true:
-          // the re-targeting block above was skipped — this is a likely freeze cause.
-          console.warn('[webpet:' + this.name + '] IDLE + followTarget set — noIdle re-targeting skipped! followTarget=' + followTarget.name + ' movementTargetX=' + (s.movementTargetX !== null ? s.movementTargetX.toFixed(1) : 'null') + ' distractionUntil=' + s.distractionUntil.toFixed(0) + ' ts=' + ts.toFixed(0));
+          // followTarget is set AND idle=true AND noIdle=true.
+          // The !followTarget block above was skipped, so nothing picked a new target.
+          // Pick one now so the rat keeps wandering instead of freezing.
+          console.debug('[webpet:' + this.name + '] IDLE + followTarget — noIdle re-targeting (fixed). followTarget=' + followTarget.name + ' old movementTargetX=' + (s.movementTargetX !== null ? s.movementTargetX.toFixed(1) : 'null'));
+          this._pickMovementAction();
+          this._pickMovementTarget(x, parentW);
+          console.debug('[webpet:' + this.name + '] IDLE + followTarget (noIdle) → new target=' + s.movementTargetX);
         }
 
         // ── Nibbling: if next to a grounded attracted target (e.g. cheese for rats),
