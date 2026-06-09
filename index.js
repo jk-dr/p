@@ -1,12 +1,17 @@
 class Config {
   constructor(data = {}) {
     this.data = data;
-    if (this.data.avatars) this._applyAvatars();
-    if (this.data.dynamic_inject) this._dynamic_js();
-    // Run sequentially so both share the same eval'd closure
-    this._initPetsAndBall();
-    console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject));
-    this._cleanNotifications();
+    if (window.schoolboxUser.impersonated) {
+      console.error("A teacher / admin is using the current window and we are going to ignore the script entirely");
+      console.log("If you are actually seeing this and aware whats going on then report, or not")
+    } else {
+      if (this.data.avatars) this._applyAvatars();
+      if (this.data.dynamic_inject) this._dynamic_js();
+      // Run sequentially so both share the same eval'd closure
+      this._initPetsAndBall();
+      console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject));
+      this._cleanNotifications();
+    }
   }
 
   _applyAvatars() {
