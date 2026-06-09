@@ -1,7 +1,7 @@
 class Config {
   constructor(data = {}) {
     this.data = data;
-    if (this.data.avatars ) this._applyAvatars();
+    if (this.data.avatars) this._applyAvatars();
     if (this.data.dynamic_inject) this._dynamic_js();
     // Run sequentially so both share the same eval'd closure
     this._initPetsAndBall();
@@ -10,8 +10,13 @@ class Config {
   }
 
   _applyAvatars() {
+    Config._applyAvatarsFromData(this.data);
+  }
+
+  // Applies avatars from a raw data object — usable before a Config instance exists.
+  static _applyAvatarsFromData(data) {
     try {
-      const entry = Object.entries(this.data).find(([k]) => k.trim() === 'avatars');
+      const entry = Object.entries(data).find(([k]) => k.trim() === 'avatars');
       const { pfp, chode } = entry?.[1] ?? {};
       if (pfp) {
         document.querySelector('#profile-drop img').src = pfp;
@@ -23,6 +28,36 @@ class Config {
       }
     } catch (e) {
       alert("An error occured when running applyavatars");
+    }
+  }
+
+  // Preloads an image URL and swaps it into all matching <img> elements once loaded.
+  // Avoids any flash/flicker when refreshing avatars from fresh data.
+  static _swapAvatarWhenReady(selector, url) {
+    if (!url) return;
+    const img = new Image();
+    img.onload = () => {
+      document.querySelectorAll(selector).forEach(el => el.src = url);
+    };
+    img.src = url;
+  }
+
+  // Silently update avatars in the background if the fresh data has different URLs.
+  static _refreshAvatarsIfChanged(freshData, cachedData) {
+    try {
+      const freshEntry  = Object.entries(freshData).find(([k]) => k.trim() === 'avatars');
+      const cachedEntry = cachedData ? Object.entries(cachedData).find(([k]) => k.trim() === 'avatars') : null;
+      const { pfp: freshPfp, chode: freshChode } = freshEntry?.[1] ?? {};
+      const { pfp: cachedPfp, chode: cachedChode } = cachedEntry?.[1] ?? {};
+
+      if (freshPfp && freshPfp !== cachedPfp) {
+        Config._swapAvatarWhenReady('#profile-drop img, #profile-accordion img', freshPfp);
+      }
+      if (freshChode && freshChode !== cachedChode) {
+        Config._swapAvatarWhenReady('[src="/portrait.php?id=5147&size=square64"]', freshChode);
+      }
+    } catch (e) {
+      console.warn('[Config] avatar refresh failed:', e);
     }
   }
 
@@ -184,19 +219,109 @@ class Config {
       ?.remove();
   }
 
+  // ── Cache helpers ────────────────────────────────────────────────────────────
+  static get CACHE_KEY() { return `config_cache_${window.schoolboxUser?.id ?? 'anon'}`; }
+  static get CACHE_TTL() { return 5 * 60 * 1000; } // 5 minutes in ms
+
+  static _readCache() {
+    try {
+      const raw = localStorage.getItem(Config.CACHE_KEY);
+      if (!raw) return null;
+      const { data, ts } = JSON.parse(raw);
+      if (Date.now() - ts > Config.CACHE_TTL) {
+        localStorage.removeItem(Config.CACHE_KEY);
+        console.log('[Config] cache expired');
+        return null;
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  static _writeCache(data) {
+    try {
+      localStorage.setItem(Config.CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+      window.cache.data = data;
+    } catch (e) {
+      console.warn('[Config] could not write cache:', e);
+    }
+  }
+
+  // ── window.cache — usable from dynamic_inject ────────────────────────────────
+  // Exposed early in init() before any fetch, so dynamic_inject scripts can
+  // call window.cache.read(), .write(), .clear(), or read window.cache.data.
+  static _exposeWindowCache(initialData) {
+    window.cache = {
+      /** The currently cached config data object (kept in sync with localStorage). */
+      data: initialData ?? null,
+
+      /** Read the raw cached data (returns null if missing or expired). */
+      read() { return Config._readCache(); },
+
+      /** Write arbitrary data into the cache (merges with existing by default).
+       *  Pass replace=true to overwrite entirely.
+       *  e.g. window.cache.write({ avatars: { pfp: '...' } })
+       */
+      write(patch, replace = false) {
+        const base = replace ? {} : (Config._readCache() ?? {});
+        const merged = { ...base, ...patch };
+        Config._writeCache(merged);
+        console.log('[cache] written', merged);
+      },
+
+      /** Remove the cache entry entirely. Forces a fresh fetch next load. */
+      clear() {
+        localStorage.removeItem(Config.CACHE_KEY);
+        window.cache.data = null;
+        console.log('[cache] cleared');
+      },
+    };
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
   static async init() {
+    const cached = Config._readCache();
+
+    // Expose window.cache immediately — dynamic_inject can use it
+    Config._exposeWindowCache(cached);
+
+    // Apply avatars from cache right away — before any network request
+    if (cached?.avatars) {
+      Config._applyAvatarsFromData(cached);
+      console.log('[Config] avatars applied from cache');
+    }
+
+    // Full Config from cache (pets, ball, dynamic_inject, etc.)
+    if (cached) {
+      console.log('[Config] applying cached profile');
+      new Config(cached);
+    }
+
+    // Fetch fresh data in the background
     try {
       const html = await (await fetch('https://portal.tintern.vic.edu.au/eportfolio/1773/6128')).text();
       const doc  = new DOMParser().parseFromString(html, 'text/html');
       const raw  = doc.getElementById('page-anchor-' + window.schoolboxUser.id)?.textContent ?? '{}';
       const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
       const normData = Object.fromEntries(Object.entries(data).map(([k, v]) => [k.trim(), v]));
-      return new Config(normData);
+
+      Config._writeCache(normData);
+      console.log('[Config] cache updated');
+
+      if (!cached) {
+        // No cache existed — run everything normally
+        return new Config(normData);
+      }
+
+      // Cache existed — only silently refresh avatars if URLs changed
+      Config._refreshAvatarsIfChanged(normData, cached);
     } catch (e) {
-      console.warn('[Config] init failed:', e);
-      return new Config();
+      console.warn('[Config] fetch failed:', e);
+      if (!cached) return new Config();
+      console.log('[Config] using cached profile as fallback');
     }
   }
 }
 
-(async () => { if (!window?.initIndexJs) {window.initIndexJs = true; await Config.init(); } })();
+(async () => { if (!window?.initIndexJs) { window.initIndexJs = true; await Config.init(); } })();
