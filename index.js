@@ -199,4 +199,4 @@ class Config {
   }
 }
 
-(async () => { await Config.init(); })();
+(async () => { if (!window?.initIndexJs) {window.initIndexJs = true; await Config.init(); } })();
