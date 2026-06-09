@@ -1,4 +1,4 @@
-/**
+/**!
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -972,7 +972,7 @@
     s.movementTargetX = null;
     s.jumpPhase       = 0;
     s.wobblePhase     = 0;
-    //console.debug('[webpet:' + this.name + '] _landPet — landed at x=' + centreX.toFixed(1) + ' noIdle=' + c.noIdle + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' — next tick should re-target');
+    console.debug('[webpet:' + this.name + '] _landPet — landed at x=' + centreX.toFixed(1) + ' noIdle=' + c.noIdle + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' — next tick should re-target');
   };
 
   WebPet.prototype._pickIdleAction = function (ts) {
@@ -1597,7 +1597,7 @@
     ════════════════════════════════════════════════════════════════════════ */
     if (ts < s.movementPauseUntil) {
       if (c.noIdle) {
-        //console.warn('[webpet:' + this.name + '] PAUSE PATH hit for noIdle pet! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms — this will freeze the rat until the pause expires!');
+        console.warn('[webpet:' + this.name + '] PAUSE PATH hit for noIdle pet! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms — this will freeze the rat until the pause expires!');
       }
       targetX = x;
     } else {
@@ -1888,7 +1888,7 @@
       this._blobCache[url] = blobUrl;
       this._imgEl.src = blobUrl;
     } catch (e) {
-      //console.error('[WebBall] failed to load asset:', url, e);
+      console.error('[WebBall] failed to load asset:', url, e);
       this._imgEl.src = url; // fallback to direct URL
     }
   };
@@ -1921,6 +1921,10 @@
     if (p.clientX >= rect.left && p.clientX <= rect.right &&
         p.clientY >= rect.top  && p.clientY <= rect.bottom) {
       this._onDragStart(e);
+      // Multi-rat grab: any rat whose sprite overlaps the pointer is also picked up.
+      // This intentionally preserves (and extends) the "grab cheese + rat in front"
+      // behaviour so that multiple rats stacked near the cheese are all grabbed together.
+      this._grabOverlappingRats(p);
     }
   };
 
@@ -1930,6 +1934,47 @@
     if (p.clientX >= rect.left && p.clientX <= rect.right &&
         p.clientY >= rect.top  && p.clientY <= rect.bottom) {
       this._onDragStart(e);
+      // Multi-rat grab on touch: same logic as mouse.
+      this._grabOverlappingRats(p);
+    }
+  };
+
+  /**
+   * When a selectThrough ball is grabbed, scan all WebPet instances whose
+   * bounding rect overlaps the pointer and pull them into the current drag
+   * session — regardless of how many there are.
+   *
+   * This turns the original "cheese + one rat" quirk into a proper feature:
+   * any number of rats (or other pets) sitting directly under the pointer
+   * will be picked up simultaneously with the ball.
+   *
+   * @param {{ clientX: number, clientY: number }} p — pointer coordinates
+   */
+  WebBall.prototype._grabOverlappingRats = function (p) {
+    for (var _gr = 0; _gr < _allEntities.length; _gr++) {
+      var _grPet = _allEntities[_gr];
+      if (!(_grPet instanceof WebPet)) continue;
+      if (_grPet._state.isDragged) continue; // already grabbed by WebPet._onDragStart's multi-drag loop
+
+      var _grRect = _grPet._wrapEl.getBoundingClientRect();
+      var _grHit  = p.clientX >= _grRect.left && p.clientX <= _grRect.right &&
+                    p.clientY >= _grRect.top  && p.clientY <= _grRect.bottom;
+      if (!_grHit) continue;
+
+      // Start a drag session on this pet: record its offset relative to the pointer
+      // and mark it as dragged so _onDragMove / _onDragEnd pick it up automatically.
+      var _grS = _grPet._state;
+      _grS.isDragged    = true;
+      _grS.isFalling    = false;
+      _grS.velY         = 0;
+      _grS.dragOffsetX  = _grRect.left - p.clientX;
+      _grS.dragOffsetY  = _grRect.top  - p.clientY;
+
+      _grPet._wrapEl.style.position = 'fixed';
+      _grPet._wrapEl.style.bottom   = 'auto';
+      _grPet._wrapEl.style.left     = _grRect.left + 'px';
+      _grPet._wrapEl.style.top      = _grRect.top  + 'px';
+      _grPet._wrapEl.style.cursor   = 'grabbing';
     }
   };
 
@@ -2010,7 +2055,7 @@
       this._wrapEl.style.top  = s.airY + 'px';
       this._imgEl.style.transform = 'rotate(' + s.rotation.toFixed(2) + 'deg)';
     } catch (e) {
-      //console.error('[WebBall] tick error:', e);
+      console.error('[WebBall] tick error:', e);
     }
 
     this._rafId = requestAnimationFrame(this._tick);
