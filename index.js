@@ -1,4 +1,4 @@
-class Config {
+class Config { //update
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -291,18 +291,29 @@ class Config {
     const tiles = this.data.customTiles;
     if (!Array.isArray(tiles) || !tiles.length) return;
 
+    // Waits for [href='<target>'] to appear in the DOM, then resolves with its closest <li>.
+    // Gives up after `timeout` ms (default 10s) to avoid hanging forever.
+    const waitForTile = (target, timeout = 10000) => new Promise((resolve) => {
+      const existing = document.querySelector(`[href='${target}']`)?.closest('li');
+      if (existing) return resolve(existing);
+
+      const observer = new MutationObserver(() => {
+        const el = document.querySelector(`[href='${target}']`)?.closest('li');
+        if (el) { observer.disconnect(); resolve(el); }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      setTimeout(() => {
+        observer.disconnect();
+        console.warn('[tiles] timed out waiting for target:', target);
+        resolve(null);
+      }, timeout);
+    });
+
     for (const { target, img, link, ttl } of tiles) {
       try {
-        const inner = document.querySelector(`li [src='${target}']`);
-        if (!inner) {
-          console.warn('[tiles] target not found:', target);
-          continue;
-        }
-        const parent = inner.closest('li');
-        if (!parent) {
-          console.warn('[tiles] no parent <li> for target:', target);
-          continue;
-        }
+        const parent = await waitForTile(target);
+        if (!parent) continue;
 
         if (link) {
           const anchor = parent.querySelector('a');
