@@ -1516,6 +1516,7 @@
     var diffX = targetX - x;
     var distX = Math.abs(diffX) || 0.0001;
     var idle  = distX < c.idleDist;
+    console.log(idle, distX < c.idleDist);
     console.debug('[webpet:' + this.name + '] tick x=' + x.toFixed(1) + ' targetX=' + targetX.toFixed(1) + ' distX=' + distX.toFixed(1) + ' idle=' + idle + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0));
 
     // Face the direction of travel
