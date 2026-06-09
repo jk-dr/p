@@ -1,4 +1,4 @@
-class Config {
+class Config { //update
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -272,19 +272,25 @@ class Config {
         return cached.dataUri;
       }
     }
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-    const blob = await res.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUri = reader.result;
-        if (ttl !== 0) Config._tileImgWriteCache(url, dataUri, ttl);
-        resolve(dataUri);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUri = reader.result;
+          if (ttl !== 0) Config._tileImgWriteCache(url, dataUri, ttl);
+          resolve(dataUri);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      // CORS or network failure — cache the raw URL so we skip the fetch next time
+      if (ttl !== 0) Config._tileImgWriteCache(url, url, ttl);
+      return url;
+    }
   }
 
   async _applyCustomTiles() {
@@ -292,35 +298,67 @@ class Config {
     if (!Array.isArray(tiles) || !tiles.length) return;
 
     // Config format:
-    //   { "target": "/homepage/39134", "img": "https://...", "link": "/" }
-    for (const { target, img, link, ttl } of tiles) {
+    //   Override existing: { "override": "/homepage/39134", "img": "https://...", "link": "/" }
+    //   New tile:          {                                 "img": "https://...", "link": "/" }
+    for (const { override, img, link, ttl } of tiles) {
       try {
-        const anchor = document.querySelector(`[href='${target}']`);
-        if (!anchor) {
-          console.warn('[tiles] target not found:', target);
-          continue;
-        }
-
-        if (link) anchor.href = link;
-
-        if (img) {
-          const applyBg = (url) => {
-            anchor.style.backgroundImage = `url('${url}')`;
-            anchor.style.backgroundSize = 'cover';
-            anchor.style.backgroundPosition = 'center';
-          };
-          try {
-            const dataUri = await Config._tileImgFetch(img, ttl);
-            applyBg(dataUri);
-          } catch (fetchErr) {
-            console.warn('[tiles] image fetch failed, falling back to direct URL:', img, fetchErr);
-            applyBg(img);
+        if (override) {
+          // ── Override existing tile ──────────────────────────────────────────
+          const anchor = document.querySelector(`[href='${override}']`);
+          if (!anchor) {
+            console.warn('[tiles] override target not found:', override);
+            continue;
           }
-        }
 
-        console.log('[tiles] applied tile for', target);
+          if (link) anchor.href = link;
+
+          if (img) {
+            const applyBg = (url) => {
+              anchor.style.backgroundImage = `url('${url}')`;
+              anchor.style.backgroundSize = 'cover';
+              anchor.style.backgroundPosition = 'center';
+            };
+            applyBg(await Config._tileImgFetch(img, ttl));
+          }
+
+          console.log('[tiles] overrode tile for', override);
+
+        } else {
+          // ── Create new tile ─────────────────────────────────────────────────
+          // Find the first tile list on the page to clone its dimensions/style
+          const existingTile = document.querySelector('li[data-tile]');
+          const tileList = existingTile?.closest('ul');
+          if (!tileList) {
+            console.warn('[tiles] could not find tile list to append new tile');
+            continue;
+          }
+
+          const li = document.createElement('li');
+          li.setAttribute('data-tile', '');
+          li.className = existingTile.className;
+          li.style.height = existingTile.style.height || '253px';
+          li.style.paddingBottom = '0px';
+
+          const anchor = document.createElement('a');
+          anchor.href = link || '#';
+          anchor.target = '_self';
+          anchor.className = 'tile-link';
+
+          if (img) {
+            const applyBg = (url) => {
+              anchor.style.backgroundImage = `url('${url}')`;
+              anchor.style.backgroundSize = 'cover';
+              anchor.style.backgroundPosition = 'center';
+            };
+            applyBg(await Config._tileImgFetch(img, ttl));
+          }
+
+          li.appendChild(anchor);
+          tileList.appendChild(li);
+          console.log('[tiles] created new tile →', link || '#');
+        }
       } catch (e) {
-        console.warn('[tiles] error applying tile for', target, e);
+        console.warn('[tiles] error applying tile:', e);
       }
     }
   }
