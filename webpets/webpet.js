@@ -1,4 +1,4 @@
-/**
+/**!
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -1489,17 +1489,109 @@
       }
     }
 
+    /* ══════════════════════════════════════════════════════════════════════
+       CHEESE / FOLLOW-TARGET NAVIGATION
+       Completely separate path from free-roam.  When a followTarget exists:
+         1. Resolve where the cheese actually is right now.
+         2. If close enough to nibble → play nibble anim and stay put.
+         3. If distracted → walk to the distraction spot instead.
+         4. Otherwise → walk straight toward the cheese.
+       Free-roam state (movementTargetX, movementPauseUntil, etc.) is never
+       read or written here — it stays clean for when the cheese disappears.
+    ════════════════════════════════════════════════════════════════════════ */
     if (followTarget) {
-      if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
-        // Temporarily distracted — wander to a nearby spot, ignore the target
-        targetX = s.distractionTargetX;
-      } else {
-        s.distractionTargetX = null; // distraction expired, back to following
-        var ftRect = followTarget._wrapEl.getBoundingClientRect();
-        targetX = ftRect.left + ftRect.width / 2 - parentRect.left;
+      var ft_rect   = followTarget._wrapEl.getBoundingClientRect();
+      var cheeseX   = ft_rect.left + ft_rect.width / 2 - parentRect.left;
+      var ft_bs     = followTarget._state;
+      var ft_speed  = Math.sqrt(ft_bs.velX * ft_bs.velX + ft_bs.velY * ft_bs.velY);
+      var ft_grounded   = !ft_bs.isDragged && ft_speed < 1.5;
+      var ft_attracted  = followTarget._cfg.attractsAnimals.indexOf(c.animal) !== -1;
+      var NIBBLE_DIST   = 12; // px — must be this close to start nibbling
+
+      var distToCheese = Math.abs(cheeseX - x);
+
+      // ── Nibble: right on top of a grounded attracted object ──
+      if (ft_grounded && ft_attracted && distToCheese < NIBBLE_DIST) {
+        if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
+        if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
+        var nibbleAction = c.hoverAction || (c.idleActions.length > 0 ? c.idleActions[0].name : 'idle');
+        this._setGif(nibbleAction);
+        s.facingDir = cheeseX >= x ? 1 : -1;
+        this._applyFacing();
+        this._hideGhost();
+        // Hold the nibble lock so distraction can't interrupt mid-nibble
+        s.distractionUntil = ts + 9999999;
+        this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+        this._syncGhost(x, x - spriteW / 2, parentW);
+        this._rafId = requestAnimationFrame(this._tick);
+        return;
       }
-    } else if (ts < s.movementPauseUntil) {
-      // Sitting out a movement pause — targetX == x means idle=true next line
+
+      // ── Distraction: temporarily wander somewhere else ──
+      // Kick off a new distraction randomly while moving (not while nibbling).
+      if (c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction) {
+        var dDist = parentW * 0.1 + Math.random() * parentW * 0.25;
+        var dDir  = Math.random() < 0.5 ? -1 : 1;
+        s.distractionTargetX = x + dDir * dDist;
+        s.distractionUntil   = ts + 1000 + Math.random() * 2000;
+        this._pickMovementAction();
+      }
+
+      // Resolve where to walk this tick
+      var walkToX;
+      if (c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null) {
+        walkToX = s.distractionTargetX;
+      } else {
+        s.distractionTargetX = null; // distraction expired — back to cheese
+        walkToX = cheeseX;
+      }
+
+      var ft_diffX = walkToX - x;
+      var ft_distX = Math.abs(ft_diffX) || 0.0001;
+
+      if (ft_distX > 0.5) {
+        s.facingDir = ft_diffX < 0 ? -1 : 1;
+      }
+
+      // Only move if we're not already right on top of the destination
+      if (ft_distX > 1) {
+        x += (ft_diffX / ft_distX) * c.speed * s.movementSpeedMult;
+
+        // Edge wrapping
+        if (x < -WRAP_MARGIN) {
+          x += parentW + WRAP_MARGIN * 2;
+          if (s.distractionTargetX !== null) s.distractionTargetX += parentW + WRAP_MARGIN * 2;
+        } else if (x > parentW + WRAP_MARGIN) {
+          x -= parentW + WRAP_MARGIN * 2;
+          if (s.distractionTargetX !== null) s.distractionTargetX -= parentW + WRAP_MARGIN * 2;
+        }
+        s.x = x;
+      }
+
+      // Bounce while running toward cheese (rats are skittish)
+      if (c.jumpAmp > 0) {
+        s.jumpPhase += 0.85;
+        this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * c.jumpAmp) + 'px';
+      }
+      var ft_wobbleRot = 0;
+      if (c.wobbleDeg > 0) {
+        s.wobblePhase += 0.55;
+        ft_wobbleRot = Math.sin(s.wobblePhase) * c.wobbleDeg;
+      }
+
+      this._setGif(s.movementAction);
+      this._applyTransforms(ft_wobbleRot);
+      this._showBubble(false);
+      this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+      this._syncGhost(x, x - spriteW / 2, parentW);
+      this._rafId = requestAnimationFrame(this._tick);
+      return;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       FREE-ROAM NAVIGATION  (no followTarget)
+    ════════════════════════════════════════════════════════════════════════ */
+    if (ts < s.movementPauseUntil) {
       if (c.noIdle) {
         console.warn('[webpet:' + this.name + '] PAUSE PATH hit for noIdle pet! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms — this will freeze the rat until the pause expires!');
       }
@@ -1508,23 +1600,13 @@
       if (s.movementTargetX === null) {
         this._pickMovementAction();
         this._pickMovementTarget(x, parentW);
-        console.debug('[webpet:' + this.name + '] targetX-resolve: picked new target=' + s.movementTargetX + ' x=' + x.toFixed(1));
       }
       targetX = s.movementTargetX !== null ? s.movementTargetX : x;
     }
 
     var diffX = targetX - x;
     var distX = Math.abs(diffX) || 0.0001;
-    // When chasing a followTarget, only go idle when close enough to nibble (tight radius).
-    // Using the full idleDist (48px) caused all rats to idle as soon as they crowded near
-    // the cheese — even ones whose targetX was the cheese but were still far away from it.
-    // When following any target (cheese or distraction wander), use a tight nibble
-    // radius so rats only stop when actually on top of the destination.
-    // The old idleDist (48px) was measured against the cheese position, causing rats
-    // to idle anywhere within a 48px halo — including ones still far across the screen.
-    var idleThreshold = followTarget ? 12 : c.idleDist;
-    var idle  = distX < idleThreshold;
-    console.debug('[webpet:' + this.name + '] tick x=' + x.toFixed(1) + ' targetX=' + targetX.toFixed(1) + ' distX=' + distX.toFixed(1) + ' idle=' + idle + ' idleThreshold=' + idleThreshold + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0));
+    var idle  = distX < c.idleDist;
 
     // Face the direction of travel
     if (Math.abs(diffX) > 0.5) {
@@ -1536,21 +1618,11 @@
     var cy = wrapRect.top  + wrapRect.height / 2;
     var distToMouse = Math.hypot(this._mouseX - cx, this._mouseY - cy);
 
-    // If a distraction is already running, skip hover entirely so the pet can
-    // actually walk away to its distractionTargetX.  Without this guard the hover
-    // branch fires every tick (mouse hasn't moved) and the pet never moves.
-    var isDistracted = followTarget !== null && c.distraction > 0 &&
-                       ts < s.distractionUntil && s.distractionTargetX !== null;
-
-    // fearCursor animals (e.g. rats) don't do friendly hover — the cursor scares them.
-    // Skip hover entirely if the mouse is within their fear radius.
     var isFearingCursor = c.fearCursor && this._hasRealPointer &&
-                          Math.hypot(this._mouseX - (wrapRect.left + wrapRect.width / 2),
-                                     this._mouseY - (wrapRect.top  + wrapRect.height / 2)) < (c.lazy ? 60 : 180);
+                          Math.hypot(this._mouseX - cx, this._mouseY - cy) < (c.lazy ? 60 : 180);
 
-    if (this._hasRealPointer && distToMouse <= c.hoverDist && !isDistracted && !isFearingCursor) {
+    if (this._hasRealPointer && distToMouse <= c.hoverDist && !isFearingCursor) {
       /* ── Hover state ── */
-      // Reset jump / wobble when transitioning to hover
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
       if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
       this._setGif(c.hoverAction);
@@ -1558,80 +1630,26 @@
       this._showBubble(true);
       this._hideGhost();
 
-      // Pets doing the swipe/hover animation right next to the mouse are easily
-      // over-stimulated — boost distraction chance 5× while in hover range.
-      if (followTarget && c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction * 5) {
-        var hDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
-        var hDir    = Math.random() < 0.5 ? -1 : 1;
-        s.distractionTargetX = x + hDir * hDist; // no clamp — wrap handles edges
-        s.distractionUntil   = ts + 1000 + Math.random() * 2000;
-        this._pickMovementAction();
-      }
-
     } else {
       this._showBubble(false);
 
       if (idle) {
         /* ── Idle state ── */
-        // Reset jump / wobble when transitioning to idle
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
-        console.debug('[webpet:' + this.name + '] → IDLE  x=' + x.toFixed(1) + ' targetX=' + (s.movementTargetX !== null ? s.movementTargetX.toFixed(1) : 'null') + ' distX=' + distX.toFixed(1) + ' followTarget=' + (followTarget ? followTarget.name : 'none') + ' pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' noIdle=' + c.noIdle);
-        if (!followTarget) {
-          // Clear any lingering nibble-suppression lock from a previous cheese visit.
-          if (s.distractionUntil > ts + 10000) s.distractionUntil = 0;
-          if (s.movementTargetX !== null) {
-            // Target is set but we're already idle — it was too close for the moving
-            // branch's arrival check to fire (that only runs when idle=false).
-            console.debug('[webpet:' + this.name + '] IDLE branch A — target was set (' + s.movementTargetX.toFixed(1) + ') but idle=true (distX=' + distX.toFixed(1) + '), clearing and re-picking. noIdle=' + c.noIdle);
-            s.movementTargetX = null;
-            if (c.noIdle) {
-              // No idling — pick the next target immediately.
-              this._pickMovementAction();
-              this._pickMovementTarget(x, parentW);
-              console.debug('[webpet:' + this.name + '] IDLE branch A (noIdle) → new target=' + s.movementTargetX);
-            } else {
-              this._scheduleMovementPause(ts);
-            }
-          } else if (c.noIdle || ts >= s.movementPauseUntil) {
-            // noIdle: always pick immediately. Otherwise: pick once the pause expires.
-            console.debug('[webpet:' + this.name + '] IDLE branch B — movementTargetX=null, noIdle=' + c.noIdle + ', ts=' + ts.toFixed(0) + ', pauseUntil=' + s.movementPauseUntil.toFixed(0));
+
+        if (s.movementTargetX !== null) {
+          // Arrived (or target was too close) — clear and re-pick immediately
+          s.movementTargetX = null;
+          if (c.noIdle) {
             this._pickMovementAction();
             this._pickMovementTarget(x, parentW);
-            console.debug('[webpet:' + this.name + '] IDLE branch B → new target=' + s.movementTargetX);
           } else {
-            // noIdle=false and pause hasn't expired yet — rat should never reach here
-            console.warn('[webpet:' + this.name + '] IDLE STALL — noIdle=' + c.noIdle + ' but waiting for pause! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms');
+            this._scheduleMovementPause(ts);
           }
-        } else if (c.noIdle) {
-          // followTarget is set AND idle=true AND noIdle=true.
-          // The !followTarget block above was skipped, so nothing picked a new target.
-          // Pick one now so the rat keeps wandering instead of freezing.
-          console.debug('[webpet:' + this.name + '] IDLE + followTarget — noIdle re-targeting (fixed). followTarget=' + followTarget.name + ' old movementTargetX=' + (s.movementTargetX !== null ? s.movementTargetX.toFixed(1) : 'null'));
+        } else if (c.noIdle || ts >= s.movementPauseUntil) {
           this._pickMovementAction();
           this._pickMovementTarget(x, parentW);
-          console.debug('[webpet:' + this.name + '] IDLE + followTarget (noIdle) → new target=' + s.movementTargetX);
-        }
-
-        // ── Nibbling: if next to a grounded attracted target (e.g. cheese for rats),
-        //    play the swipe/nibble animation and suppress distraction so they stay put.
-        if (followTarget && followTarget instanceof WebBall) {
-          var nb_bs = followTarget._state;
-          var nb_ballSpeed = Math.sqrt(nb_bs.velX * nb_bs.velX + nb_bs.velY * nb_bs.velY);
-          var nb_isGrounded = !nb_bs.isDragged && nb_ballSpeed < 1.5;
-          var nb_isAttracted = followTarget._cfg.attractsAnimals.indexOf(c.animal) !== -1;
-          if (nb_isGrounded && nb_isAttracted) {
-            // Use the hover/swipe action for nibbling — rats have 'swipe' as hoverAction
-            // but no swipe in idleActions, so we use hoverAction directly here.
-            var nibbleAction = c.hoverAction || (c.idleActions.length > 1 ? c.idleActions[1].name : c.idleActions[0].name);
-            this._setGif(nibbleAction);
-            this._applyFacing();
-            this._hideGhost();
-            // Suppress distraction so the rat doesn't wander away mid-nibble
-            s.distractionUntil = ts + 9999999;
-            this._rafId = requestAnimationFrame(this._tick);
-            return;
-          }
         }
 
         if (!c.noIdle) {
@@ -1646,49 +1664,28 @@
       } else {
         /* ── Moving state ── */
 
-        // Randomly flip direction mid-walk (flipChance / nervous)
+        // Randomly flip direction mid-walk
         if (c.flipChance > 0 && s.movementTargetX !== null && Math.random() < c.flipChance) {
-          var flipped = x - (s.movementTargetX - x);
-          s.movementTargetX = flipped; // allow off-screen targets so wrapping can fire
+          s.movementTargetX = x - (s.movementTargetX - x);
         }
 
-        // Distraction — abandon current target and pick a completely new one.
-        // In free-roam mode, replaces movementTargetX directly.
-        // In followEntity mode, sets a temporary distractionTargetX the pet wanders to before snapping back.
-        if (c.distraction > 0 && Math.random() < c.distraction) {
-          if (followTarget) {
-            if (ts >= s.distractionUntil) {
-              // Start a new distraction: pick a nearby random spot and a duration of 1–3 s
-              var dDist   = parentW * 0.1 + Math.random() * parentW * 0.25;
-              var dDir    = Math.random() < 0.5 ? -1 : 1;
-              s.distractionTargetX = x + dDir * dDist; // no clamp — wrap handles edges
-              s.distractionUntil   = ts + 1000 + Math.random() * 2000;
-              this._pickMovementAction();
-            }
-          } else if (s.movementTargetX !== null) {
-            this._pickMovementAction();
-            this._pickMovementTarget(x, parentW);
-          }
+        // Distraction in free-roam: just pick a new target
+        if (c.distraction > 0 && s.movementTargetX !== null && Math.random() < c.distraction) {
+          this._pickMovementAction();
+          this._pickMovementTarget(x, parentW);
         }
 
         x += (diffX / distX) * c.speed * s.movementSpeedMult;
 
-        // Seamless edge wrapping (only during pathing, not while dragged/falling).
-        // When the pet walks fully off one edge, we teleport its logical x to the
-        // opposite edge — but because the ghost has been shadowing it from there,
-        // the visual transition is invisible to the viewer.
+        // Edge wrapping
         if (x < -WRAP_MARGIN) {
           x += parentW + WRAP_MARGIN * 2;
-          // Re-align movementTargetX to the new coordinate space so the pet
-          // continues walking toward the same visual destination.
-          if (s.movementTargetX !== null) s.movementTargetX += parentW + WRAP_MARGIN * 2;
-          if (s.distractionTargetX !== null) s.distractionTargetX += parentW + WRAP_MARGIN * 2;
+          if (s.movementTargetX    !== null) s.movementTargetX    += parentW + WRAP_MARGIN * 2;
           if (s.fleeTargetX        !== null) s.fleeTargetX        += parentW + WRAP_MARGIN * 2;
           if (s.peerFleeTargetX    !== null) s.peerFleeTargetX    += parentW + WRAP_MARGIN * 2;
         } else if (x > parentW + WRAP_MARGIN) {
           x -= parentW + WRAP_MARGIN * 2;
-          if (s.movementTargetX !== null) s.movementTargetX -= parentW + WRAP_MARGIN * 2;
-          if (s.distractionTargetX !== null) s.distractionTargetX -= parentW + WRAP_MARGIN * 2;
+          if (s.movementTargetX    !== null) s.movementTargetX    -= parentW + WRAP_MARGIN * 2;
           if (s.fleeTargetX        !== null) s.fleeTargetX        -= parentW + WRAP_MARGIN * 2;
           if (s.peerFleeTargetX    !== null) s.peerFleeTargetX    -= parentW + WRAP_MARGIN * 2;
         }
@@ -1701,21 +1698,18 @@
           this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * c.jumpAmp) + 'px';
         }
 
-        // Rotation wobble (wobble)
+        // Rotation wobble
         var wobbleRot = 0;
         if (c.wobbleDeg > 0) {
           s.wobblePhase += 0.55;
           wobbleRot = Math.sin(s.wobblePhase) * c.wobbleDeg;
         }
 
-        if (!followTarget && s.movementTargetX !== null && distX <= c.idleDist) {
-          console.debug('[webpet:' + this.name + '] MOVING→arrived at target=' + s.movementTargetX.toFixed(1) + ' distX=' + distX.toFixed(1) + ' noIdle=' + c.noIdle);
+        if (s.movementTargetX !== null && distX <= c.idleDist) {
           s.movementTargetX = null;
           if (c.noIdle) {
-            // No idling — pick the next target immediately so the pet keeps moving.
             this._pickMovementAction();
             this._pickMovementTarget(x, parentW);
-            console.debug('[webpet:' + this.name + '] MOVING→arrived (noIdle) → next target=' + s.movementTargetX);
           } else {
             this._scheduleMovementPause(ts);
           }
@@ -1723,7 +1717,7 @@
 
         // Reset idle timer while moving
         if (c.idleActions.length > 0) s.idleAction = c.idleActions[0].name;
-        s.idleActionUntil  = 0;
+        s.idleActionUntil   = 0;
         s.idleCooldownUntil = 0;
 
         this._setGif(s.movementAction);
