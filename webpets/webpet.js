@@ -1,4 +1,4 @@
-/**
+/** !
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -970,6 +970,7 @@
     s.movementTargetX = null;
     s.jumpPhase       = 0;
     s.wobblePhase     = 0;
+    console.debug('[webpet:' + this.name + '] _landPet — landed at x=' + centreX.toFixed(1) + ' noIdle=' + c.noIdle + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' — next tick should re-target');
   };
 
   WebPet.prototype._pickIdleAction = function (ts) {
@@ -1498,11 +1499,16 @@
         targetX = ftRect.left + ftRect.width / 2 - parentRect.left;
       }
     } else if (ts < s.movementPauseUntil) {
+      // Sitting out a movement pause — targetX == x means idle=true next line
+      if (c.noIdle) {
+        console.warn('[webpet:' + this.name + '] PAUSE PATH hit for noIdle pet! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms — this will freeze the rat until the pause expires!');
+      }
       targetX = x;
     } else {
       if (s.movementTargetX === null) {
         this._pickMovementAction();
         this._pickMovementTarget(x, parentW);
+        console.debug('[webpet:' + this.name + '] targetX-resolve: picked new target=' + s.movementTargetX + ' x=' + x.toFixed(1));
       }
       targetX = s.movementTargetX !== null ? s.movementTargetX : x;
     }
@@ -1510,6 +1516,7 @@
     var diffX = targetX - x;
     var distX = Math.abs(diffX) || 0.0001;
     var idle  = distX < c.idleDist;
+    console.debug('[webpet:' + this.name + '] tick x=' + x.toFixed(1) + ' targetX=' + targetX.toFixed(1) + ' distX=' + distX.toFixed(1) + ' idle=' + idle + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0));
 
     // Face the direction of travel
     if (Math.abs(diffX) > 0.5) {
@@ -1561,25 +1568,37 @@
         // Reset jump / wobble when transitioning to idle
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; this._applyFacing(); }
+        console.debug('[webpet:' + this.name + '] → IDLE  x=' + x.toFixed(1) + ' targetX=' + (s.movementTargetX !== null ? s.movementTargetX.toFixed(1) : 'null') + ' distX=' + distX.toFixed(1) + ' followTarget=' + (followTarget ? followTarget.name : 'none') + ' pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' noIdle=' + c.noIdle);
         if (!followTarget) {
           // Clear any lingering nibble-suppression lock from a previous cheese visit.
           if (s.distractionUntil > ts + 10000) s.distractionUntil = 0;
           if (s.movementTargetX !== null) {
             // Target is set but we're already idle — it was too close for the moving
             // branch's arrival check to fire (that only runs when idle=false).
+            console.debug('[webpet:' + this.name + '] IDLE branch A — target was set (' + s.movementTargetX.toFixed(1) + ') but idle=true (distX=' + distX.toFixed(1) + '), clearing and re-picking. noIdle=' + c.noIdle);
             s.movementTargetX = null;
             if (c.noIdle) {
               // No idling — pick the next target immediately.
               this._pickMovementAction();
               this._pickMovementTarget(x, parentW);
+              console.debug('[webpet:' + this.name + '] IDLE branch A (noIdle) → new target=' + s.movementTargetX);
             } else {
               this._scheduleMovementPause(ts);
             }
           } else if (c.noIdle || ts >= s.movementPauseUntil) {
             // noIdle: always pick immediately. Otherwise: pick once the pause expires.
+            console.debug('[webpet:' + this.name + '] IDLE branch B — movementTargetX=null, noIdle=' + c.noIdle + ', ts=' + ts.toFixed(0) + ', pauseUntil=' + s.movementPauseUntil.toFixed(0));
             this._pickMovementAction();
             this._pickMovementTarget(x, parentW);
+            console.debug('[webpet:' + this.name + '] IDLE branch B → new target=' + s.movementTargetX);
+          } else {
+            // noIdle=false and pause hasn't expired yet — rat should never reach here
+            console.warn('[webpet:' + this.name + '] IDLE STALL — noIdle=' + c.noIdle + ' but waiting for pause! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms');
           }
+        } else if (c.noIdle) {
+          // followTarget is set AND idle=true AND noIdle=true:
+          // the re-targeting block above was skipped — this is a likely freeze cause.
+          console.warn('[webpet:' + this.name + '] IDLE + followTarget set — noIdle re-targeting skipped! followTarget=' + followTarget.name + ' movementTargetX=' + (s.movementTargetX !== null ? s.movementTargetX.toFixed(1) : 'null') + ' distractionUntil=' + s.distractionUntil.toFixed(0) + ' ts=' + ts.toFixed(0));
         }
 
         // ── Nibbling: if next to a grounded attracted target (e.g. cheese for rats),
@@ -1678,11 +1697,13 @@
         }
 
         if (!followTarget && s.movementTargetX !== null && distX <= c.idleDist) {
+          console.debug('[webpet:' + this.name + '] MOVING→arrived at target=' + s.movementTargetX.toFixed(1) + ' distX=' + distX.toFixed(1) + ' noIdle=' + c.noIdle);
           s.movementTargetX = null;
           if (c.noIdle) {
             // No idling — pick the next target immediately so the pet keeps moving.
             this._pickMovementAction();
             this._pickMovementTarget(x, parentW);
+            console.debug('[webpet:' + this.name + '] MOVING→arrived (noIdle) → next target=' + s.movementTargetX);
           } else {
             this._scheduleMovementPause(ts);
           }
