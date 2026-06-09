@@ -7,6 +7,7 @@ class Config {
     } else {
       if (this.data.avatars) this._applyAvatars();
       if (this.data.dynamic_inject) this._dynamic_js();
+      if (this.data.customTiles) this._applyCustomTiles();
       // Run sequentially so both share the same eval'd closure
       this._initPetsAndBall();
       console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject));
@@ -222,6 +223,108 @@ class Config {
     document.querySelector('#webpets')
       ?.closest('li.actions-small-1.status-read')
       ?.remove();
+  }
+
+  // ── Custom Tiles ─────────────────────────────────────────────────────────────
+  // Overrides tile background images and links on the homepage.
+  //
+  // Config data format:
+  //   "customTiles": [
+  //     { "target": "/homepage/35943", "img": "/link/to/image.png", "link": "/link/to/target" },
+  //     { "target": "/homepage/99999", "img": "https://...", "link": "/...", "ttl": 0 }
+  //   ]
+  //
+  // ttl (optional, ms): how long the cached image stays valid. Default: 5 min.
+  //                     Set to 0 to always fetch fresh (no caching).
+
+  static get TILE_IMG_CACHE_PREFIX() { return 'tile_img_'; }
+
+  static _tileImgReadCache(url) {
+    try {
+      const raw = localStorage.getItem(Config.TILE_IMG_CACHE_PREFIX + url);
+      if (!raw) return null;
+      const entry = JSON.parse(raw);
+      if (Date.now() - entry.ts > (entry.ttl ?? Config.CACHE_TTL)) {
+        localStorage.removeItem(Config.TILE_IMG_CACHE_PREFIX + url);
+        console.log('[tiles] image cache expired for', url);
+        return null;
+      }
+      return entry;
+    } catch {
+      return null;
+    }
+  }
+
+  static _tileImgWriteCache(url, dataUri, ttl) {
+    try {
+      const entry = { dataUri, ts: Date.now(), ...(ttl != null && { ttl }) };
+      localStorage.setItem(Config.TILE_IMG_CACHE_PREFIX + url, JSON.stringify(entry));
+    } catch (e) {
+      console.warn('[tiles] could not cache image for', url, e);
+    }
+  }
+
+  static async _tileImgFetch(url, ttl) {
+    if (ttl !== 0) {
+      const cached = Config._tileImgReadCache(url);
+      if (cached) {
+        console.log('[tiles] image from cache:', url);
+        return cached.dataUri;
+      }
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    const blob = await res.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUri = reader.result;
+        if (ttl !== 0) Config._tileImgWriteCache(url, dataUri, ttl);
+        resolve(dataUri);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async _applyCustomTiles() {
+    const tiles = this.data.customTiles;
+    if (!Array.isArray(tiles) || !tiles.length) return;
+
+    for (const { target, img, link, ttl } of tiles) {
+      try {
+        const inner = document.querySelector(`li [src='${target}']`);
+        if (!inner) {
+          console.warn('[tiles] target not found:', target);
+          continue;
+        }
+        const parent = inner.closest('li');
+        if (!parent) {
+          console.warn('[tiles] no parent <li> for target:', target);
+          continue;
+        }
+
+        if (link) {
+          const anchor = parent.querySelector('a');
+          if (anchor) anchor.href = link;
+          else console.warn('[tiles] no <a> found inside tile for target:', target);
+        }
+
+        if (img) {
+          try {
+            const dataUri = await Config._tileImgFetch(img, ttl);
+            parent.style.backgroundImage = `url(${dataUri})`;
+          } catch (fetchErr) {
+            console.warn('[tiles] image fetch failed, falling back to direct URL:', img, fetchErr);
+            parent.style.backgroundImage = `url(${img})`;
+          }
+        }
+
+        console.log('[tiles] applied tile for', target);
+      } catch (e) {
+        console.warn('[tiles] error applying tile for', target, e);
+      }
+    }
   }
 
   // ── Cache helpers ────────────────────────────────────────────────────────────
