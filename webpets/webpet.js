@@ -972,7 +972,7 @@
     s.movementTargetX = null;
     s.jumpPhase       = 0;
     s.wobblePhase     = 0;
-    console.debug('[webpet:' + this.name + '] _landPet — landed at x=' + centreX.toFixed(1) + ' noIdle=' + c.noIdle + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' — next tick should re-target');
+    //console.debug('[webpet:' + this.name + '] _landPet — landed at x=' + centreX.toFixed(1) + ' noIdle=' + c.noIdle + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' — next tick should re-target');
   };
 
   WebPet.prototype._pickIdleAction = function (ts) {
@@ -1597,7 +1597,7 @@
     ════════════════════════════════════════════════════════════════════════ */
     if (ts < s.movementPauseUntil) {
       if (c.noIdle) {
-        console.warn('[webpet:' + this.name + '] PAUSE PATH hit for noIdle pet! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms — this will freeze the rat until the pause expires!');
+        //console.warn('[webpet:' + this.name + '] PAUSE PATH hit for noIdle pet! pauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0) + ' remaining=' + (s.movementPauseUntil - ts).toFixed(0) + 'ms — this will freeze the rat until the pause expires!');
       }
       targetX = x;
     } else {
@@ -1888,7 +1888,7 @@
       this._blobCache[url] = blobUrl;
       this._imgEl.src = blobUrl;
     } catch (e) {
-      console.error('[WebBall] failed to load asset:', url, e);
+      //console.error('[WebBall] failed to load asset:', url, e);
       this._imgEl.src = url; // fallback to direct URL
     }
   };
@@ -2010,7 +2010,7 @@
       this._wrapEl.style.top  = s.airY + 'px';
       this._imgEl.style.transform = 'rotate(' + s.rotation.toFixed(2) + 'deg)';
     } catch (e) {
-      console.error('[WebBall] tick error:', e);
+      //console.error('[WebBall] tick error:', e);
     }
 
     this._rafId = requestAnimationFrame(this._tick);
