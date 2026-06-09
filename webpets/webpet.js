@@ -1,4 +1,4 @@
-/**!
+/**
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -459,6 +459,8 @@
       fleeUntil:              0,
       peerFleeTargetX:        null,
       peerFleeUntil:          0,
+      fearCooldownUntil:      0,
+      peerFearCooldownUntil:  0,
       lastStepTime:           0,
       lastGif:                null,
       isHovered:              false,
@@ -1220,84 +1222,41 @@
 
     /* ── Cursor-fear (rats and fearCursor animals) ── */
     if (c.fearCursor && this._hasRealPointer && !s.isDragged) {
-      // Lazy pets have a much smaller personal-space bubble and can't be bothered to sprint
-      var FEAR_RADIUS  = c.lazy ? 60 : 180;
-      var FEAR_MARGIN  = 20;
+      var FEAR_RADIUS = c.lazy ? 80 : 320;
       var cx_f = wrapRect.left + wrapRect.width  / 2;
       var cy_f = wrapRect.top  + wrapRect.height / 2;
       var mouseDist = Math.hypot(this._mouseX - cx_f, this._mouseY - cy_f);
 
       if (mouseDist < FEAR_RADIUS) {
-        // Lazy pets only bother 40% of the time — otherwise they just sit there
         if (c.lazy && Math.random() < 0.6) {
-          // Can't be bothered. Clear flee state and carry on.
-          s.fleeTargetX = null;
-          s.fleeUntil   = 0;
-          // fall through to normal movement below
+          // Lazy: can't be bothered — clear and fall through
+          s.fleeTargetX    = null;
+          s.fleeUntil      = 0;
+          s.fearCooldownUntil = 0;
         } else {
-          // Pick a flee target away from the cursor, re-evaluate when we've reached
-          // the current target OR when the timer expires (longer timer so the pet
-          // commits to running off-screen rather than recalculating mid-way).
-          var needsNewFlee = s.fleeTargetX === null ||
-            (ts >= s.fleeUntil && Math.abs(s.fleeTargetX - x) < 48);
+          // Pick or refresh a flee target.
+          // Only recalculate once the PREVIOUS flee target is fully reached,
+          // not just "close" — this stops the rat yo-yoing back to cheese.
+          var needsNewFlee = s.fleeTargetX === null || ts >= s.fleeUntil;
 
           if (needsNewFlee) {
-            // Flee direction = opposite of cursor relative to pet centre
-            var fleeDir = (cx_f >= this._mouseX) ? 1 : -1;
-            // Lazy pets shuffle a short distance; others bolt far enough to leave the screen
+            var fleeDir  = (cx_f >= this._mouseX) ? 1 : -1;
             var fleeDist = c.lazy
               ? FEAR_RADIUS * 0.5 + Math.random() * parentW * 0.1
-              : parentW * 0.6 + Math.random() * parentW * 0.4;
-            // Allow the flee target to go off-screen so wrapping can fire
+              : parentW * 0.8 + Math.random() * parentW * 0.4; // bolt well off-screen
             s.fleeTargetX = x + fleeDir * fleeDist;
-            // Long enough timer that the pet won't recalculate before crossing the edge
-            s.fleeUntil = ts + 1500 + Math.random() * 500;
-            // Lazy pets shuffle at walk speed; others always sprint
-            if (c.lazy) {
-              var walkAction = c.movementActions[0];
-              s.movementAction    = walkAction ? walkAction.name : s.movementAction;
-              s.movementSpeedMult = walkAction ? walkAction.speedMultiplier : s.movementSpeedMult;
-            } else {
-              var runAction = c.movementActions[c.movementActions.length - 1];
-              s.movementAction    = runAction ? runAction.name : s.movementAction;
-              s.movementSpeedMult = runAction ? runAction.speedMultiplier : s.movementSpeedMult;
-            }
+            // Commit for long enough to cross the screen; prevents cheese from
+            // winning back control mid-sprint
+            s.fleeUntil = ts + 3500 + Math.random() * 1500;
+            var runAct = c.movementActions[c.movementActions.length - 1];
+            s.movementAction    = runAct ? runAct.name : s.movementAction;
+            s.movementSpeedMult = runAct ? runAct.speedMultiplier : s.movementSpeedMult;
           }
 
-          // Suppress cursor-fear ONLY if an attracted object (e.g. cheese) is nearby
-          // AND the rat is still moving toward it (not yet idling next to it).
-          // Once the rat is nibbling at the cheese, the mouse should still scare it off.
-          var SNATCH_RADIUS = 80;
-          var suppressFear  = false;
-          for (var sf_i = 0; sf_i < _allEntities.length; sf_i++) {
-            var sf_e = _allEntities[sf_i];
-            if (!(sf_e instanceof WebBall)) continue;
-            var sf_a = sf_e._cfg.attractsAnimals;
-            if (sf_a.length === 0 || sf_a.indexOf(c.animal) === -1) continue;
-            var sf_r = sf_e._wrapEl.getBoundingClientRect();
-            var sf_cx = sf_r.left + sf_r.width  / 2;
-            var sf_cy = sf_r.top  + sf_r.height / 2;
-            var sf_dist = Math.hypot(sf_cx - cx_f, sf_cy - cy_f);
-            // Only suppress if rat is still approaching cheese (further than idleDist away).
-            // If the rat is already sitting on the cheese (sf_dist < idleDist), fear wins.
-            if (sf_dist < SNATCH_RADIUS && sf_dist >= c.idleDist) {
-              suppressFear = true;
-              break;
-            }
-          }
-          if (suppressFear) {
-            s.fleeTargetX = null;
-            s.fleeUntil   = 0;
-            // fall through to normal chase logic below
-          } else {
-          // Use the flee target instead of normal targeting
-          var fleeDiffX  = s.fleeTargetX - x;
-          var fleeDistX  = Math.abs(fleeDiffX) || 0.0001;
+          var fleeDiffX = s.fleeTargetX - x;
+          var fleeDistX = Math.abs(fleeDiffX) || 0.0001;
           if (Math.abs(fleeDiffX) > 0.5) s.facingDir = fleeDiffX < 0 ? -1 : 1;
-          // Lazy pets shuffle at normal pace; others bolt at 1.6×
-          var fleeSpeedMult = c.lazy ? 0.9 : 1.6;
-          x += (fleeDiffX / fleeDistX) * c.speed * s.movementSpeedMult * fleeSpeedMult;
-          // Apply wrap instead of clamping — same logic as normal pathing
+          x += (fleeDiffX / fleeDistX) * c.speed * s.movementSpeedMult * 1.8;
           if (x < -WRAP_MARGIN) {
             x += parentW + WRAP_MARGIN * 2;
             if (s.fleeTargetX !== null) s.fleeTargetX += parentW + WRAP_MARGIN * 2;
@@ -1306,31 +1265,56 @@
             if (s.fleeTargetX !== null) s.fleeTargetX -= parentW + WRAP_MARGIN * 2;
           }
           s.x = x;
-          // Only non-lazy pets panic-bounce
-          if (!c.lazy) {
-            s.jumpPhase = (s.jumpPhase || 0) + 1.2;
-            this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * 6) + 'px';
-          }
-          s.idleAction      = c.idleActions[0] ? c.idleActions[0].name : 'idle';
-          s.idleActionUntil = 0;
+          s.jumpPhase = (s.jumpPhase || 0) + 1.2;
+          this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * 6) + 'px';
           this._setGif(s.movementAction);
           this._applyFacing();
           this._wrapEl.style.left = (x - spriteW / 2) + 'px';
           this._syncGhost(x, x - spriteW / 2, parentW);
           this._rafId = requestAnimationFrame(this._tick);
           return;
-          } // end !suppressFear
         }
       } else {
-        // Outside fear radius — clear flee state
+        // Cursor left the radius — start a cooldown before cheese-chasing resumes.
+        // Without this the rat spins around and runs back instantly.
+        if (s.fleeTargetX !== null) {
+          s.fearCooldownUntil = ts + 2500 + Math.random() * 1500;
+        }
         s.fleeTargetX = null;
         s.fleeUntil   = 0;
       }
     }
 
+    // Block cheese-chasing during post-fear cooldown, even if cursor is gone
+    if (c.fearCursor && s.fearCooldownUntil && ts < s.fearCooldownUntil) {
+      // Keep wandering away (or just roaming) — do NOT return to cheese yet
+      if (s.movementTargetX === null) {
+        this._pickMovementAction();
+        this._pickMovementTarget(x, parentW);
+      }
+      var cd_diffX = s.movementTargetX - x;
+      var cd_distX = Math.abs(cd_diffX) || 0.0001;
+      if (Math.abs(cd_diffX) > 0.5) s.facingDir = cd_diffX < 0 ? -1 : 1;
+      x += (cd_diffX / cd_distX) * c.speed * s.movementSpeedMult;
+      if (x < -WRAP_MARGIN) {
+        x += parentW + WRAP_MARGIN * 2;
+        if (s.movementTargetX !== null) s.movementTargetX += parentW + WRAP_MARGIN * 2;
+      } else if (x > parentW + WRAP_MARGIN) {
+        x -= parentW + WRAP_MARGIN * 2;
+        if (s.movementTargetX !== null) s.movementTargetX -= parentW + WRAP_MARGIN * 2;
+      }
+      s.x = x;
+      this._setGif(s.movementAction);
+      this._applyFacing();
+      this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+      this._syncGhost(x, x - spriteW / 2, parentW);
+      this._rafId = requestAnimationFrame(this._tick);
+      return;
+    }
+
     /* ── Peer-fear: flee from nearby animals that are bigger/scarier ── */
     if (c.fearOthers && !s.isDragged) {
-      var BASE_PEER_RADIUS = 120; // px baseline; scales up with size difference
+      var BASE_PEER_RADIUS = 200; // was 120 — bigger awareness bubble
       var mySize = c.fearSize;
       var worstThreat  = null;
       var worstThreatX = 0;
@@ -1339,10 +1323,10 @@
       for (var pi = 0; pi < _allEntities.length; pi++) {
         var peer = _allEntities[pi];
         if (peer === this) continue;
-        if (peer instanceof WebBall) continue; // balls are objects, not threats
+        if (peer instanceof WebBall) continue;
         var peerSize = peer._cfg.fearSize != null ? peer._cfg.fearSize : 3;
         var sizeDiff = peerSize - mySize;
-        if (sizeDiff <= 0) continue; // only scared of bigger animals
+        if (sizeDiff <= 0) continue;
 
         var peerRect = peer._wrapEl.getBoundingClientRect();
         var peerCX   = peerRect.left + peerRect.width  / 2;
@@ -1350,11 +1334,10 @@
         var myCX     = wrapRect.left + wrapRect.width  / 2;
         var myCY     = wrapRect.top  + wrapRect.height / 2;
         var peerDist = Math.hypot(peerCX - myCX, peerCY - myCY);
-        // Radius grows linearly with size difference; dino(9) vs rat(1)=8 → 240px+120 = 360px
-        var triggerRadius = BASE_PEER_RADIUS + sizeDiff * 30;
+        var triggerRadius = BASE_PEER_RADIUS + sizeDiff * 50; // wider per size-unit
         if (peerDist > triggerRadius) continue;
 
-        var score = sizeDiff * (1 - peerDist / triggerRadius); // 0–8, higher = scarier
+        var score = sizeDiff * (1 - peerDist / triggerRadius);
         if (score > worstScore) {
           worstScore   = score;
           worstThreat  = peer;
@@ -1363,41 +1346,31 @@
       }
 
       if (worstThreat !== null) {
-        // Lazy pets only react 30% of the time — can't be bothered
         if (c.lazy && Math.random() < 0.70) {
-          // shrug — fall through to normal movement
+          // shrug
         } else {
-          // Use dedicated peer-flee state so cursor-fear can't clobber it
-          var peerNeedsNewFlee = s.peerFleeTargetX === null ||
-            (ts >= s.peerFleeUntil && Math.abs(s.peerFleeTargetX - x) < 48);
+          var peerNeedsNewFlee = s.peerFleeTargetX === null || ts >= s.peerFleeUntil;
 
           if (peerNeedsNewFlee) {
             var peerFleeDir  = (wrapRect.left + wrapRect.width / 2) >= worstThreatX ? 1 : -1;
-            var peerFleeDist = parentW * 0.5 + worstScore * parentW * 0.06;
-            // Allow target off-screen so wrapping fires
+            var peerFleeDist = parentW * 0.7 + worstScore * parentW * 0.08;
             s.peerFleeTargetX = x + peerFleeDir * peerFleeDist;
-            s.peerFleeUntil   = ts + 1500 + Math.random() * 500;
+            s.peerFleeUntil   = ts + 3500 + Math.random() * 1500; // committed sprint
+            // Always sprint when peer-fleeing
+            var pSprintAct = c.movementActions[c.movementActions.length - 1];
+            s.movementAction    = pSprintAct ? pSprintAct.name : s.movementAction;
+            s.movementSpeedMult = pSprintAct ? pSprintAct.speedMultiplier : s.movementSpeedMult;
+          }
 
-            // Sprint chance scales with size difference
-            var sizeDiff3    = worstThreat._cfg.fearSize - mySize;
-            var sprintChance = Math.min(1, sizeDiff3 / 5);
-            if (!c.lazy && Math.random() < sprintChance) {
-              var sprintAct = c.movementActions[c.movementActions.length - 1];
-              s.movementAction    = sprintAct ? sprintAct.name : s.movementAction;
-              s.movementSpeedMult = sprintAct ? sprintAct.speedMultiplier : s.movementSpeedMult;
-            } else {
-              var trotAct = c.movementActions[Math.floor(c.movementActions.length / 2)];
-              s.movementAction    = trotAct ? trotAct.name : s.movementAction;
-              s.movementSpeedMult = trotAct ? trotAct.speedMultiplier : s.movementSpeedMult;
-            }
+          // Post-peer-fear cooldown: set when the threat moves out of range
+          if (worstThreat === null && s.peerFleeTargetX !== null) {
+            s.peerFearCooldownUntil = ts + 2000 + Math.random() * 1000;
           }
 
           var pFleeDiffX = s.peerFleeTargetX - x;
           var pFleeDistX = Math.abs(pFleeDiffX) || 0.0001;
           if (Math.abs(pFleeDiffX) > 0.5) s.facingDir = pFleeDiffX < 0 ? -1 : 1;
-          var pFleeSpeedMult = c.lazy ? 0.9 : 1.4;
-          x += (pFleeDiffX / pFleeDistX) * c.speed * s.movementSpeedMult * pFleeSpeedMult;
-          // Apply wrap instead of clamping
+          x += (pFleeDiffX / pFleeDistX) * c.speed * s.movementSpeedMult * 1.6;
           if (x < -WRAP_MARGIN) {
             x += parentW + WRAP_MARGIN * 2;
             if (s.peerFleeTargetX !== null) s.peerFleeTargetX += parentW + WRAP_MARGIN * 2;
@@ -1406,12 +1379,8 @@
             if (s.peerFleeTargetX !== null) s.peerFleeTargetX -= parentW + WRAP_MARGIN * 2;
           }
           s.x = x;
-          if (!c.lazy) {
-            s.jumpPhase = (s.jumpPhase || 0) + 0.9;
-            this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * 4) + 'px';
-          }
-          s.idleAction      = c.idleActions[0] ? c.idleActions[0].name : 'idle';
-          s.idleActionUntil = 0;
+          s.jumpPhase = (s.jumpPhase || 0) + 0.9;
+          this._wrapEl.style.bottom = (Math.abs(Math.sin(s.jumpPhase)) * 4) + 'px';
           this._setGif(s.movementAction);
           this._applyFacing();
           this._wrapEl.style.left = (x - spriteW / 2) + 'px';
@@ -1419,7 +1388,42 @@
           this._rafId = requestAnimationFrame(this._tick);
           return;
         }
+      } else {
+        // No threat in range — apply peer-fear cooldown before resuming cheese
+        if (s.peerFleeTargetX !== null) {
+          s.peerFearCooldownUntil = (s.peerFearCooldownUntil || 0) < ts + 2000
+            ? ts + 2000 + Math.random() * 1000
+            : s.peerFearCooldownUntil;
+        }
+        s.peerFleeTargetX = null;
+        s.peerFleeUntil   = 0;
       }
+    }
+
+    // Block cheese-chasing during post-peer-fear cooldown
+    if (c.fearOthers && s.peerFearCooldownUntil && ts < s.peerFearCooldownUntil) {
+      if (s.movementTargetX === null) {
+        this._pickMovementAction();
+        this._pickMovementTarget(x, parentW);
+      }
+      var pcd_diffX = s.movementTargetX - x;
+      var pcd_distX = Math.abs(pcd_diffX) || 0.0001;
+      if (Math.abs(pcd_diffX) > 0.5) s.facingDir = pcd_diffX < 0 ? -1 : 1;
+      x += (pcd_diffX / pcd_distX) * c.speed * s.movementSpeedMult;
+      if (x < -WRAP_MARGIN) {
+        x += parentW + WRAP_MARGIN * 2;
+        if (s.movementTargetX !== null) s.movementTargetX += parentW + WRAP_MARGIN * 2;
+      } else if (x > parentW + WRAP_MARGIN) {
+        x -= parentW + WRAP_MARGIN * 2;
+        if (s.movementTargetX !== null) s.movementTargetX -= parentW + WRAP_MARGIN * 2;
+      }
+      s.x = x;
+      this._setGif(s.movementAction);
+      this._applyFacing();
+      this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+      this._syncGhost(x, x - spriteW / 2, parentW);
+      this._rafId = requestAnimationFrame(this._tick);
+      return;
     }
 
     // Auto-targeting: resolve which WebBall (if any) this pet should chase this tick.
