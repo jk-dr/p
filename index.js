@@ -1,4 +1,4 @@
-class Config { //update
+class Config {
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -291,43 +291,30 @@ class Config { //update
     const tiles = this.data.customTiles;
     if (!Array.isArray(tiles) || !tiles.length) return;
 
-    // Waits for [href='<target>'] to appear in the DOM, then resolves with its closest <li>.
-    // Gives up after `timeout` ms (default 10s) to avoid hanging forever.
-    const waitForTile = (target, timeout = 10000) => new Promise((resolve) => {
-      const existing = document.querySelector(`[href='${target}']`)?.closest('li');
-      if (existing) return resolve(existing);
-
-      const observer = new MutationObserver(() => {
-        const el = document.querySelector(`[href='${target}']`)?.closest('li');
-        if (el) { observer.disconnect(); resolve(el); }
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      setTimeout(() => {
-        observer.disconnect();
-        console.warn('[tiles] timed out waiting for target:', target);
-        resolve(null);
-      }, timeout);
-    });
-
+    // Config format:
+    //   { "target": "/homepage/39134", "img": "https://...", "link": "/" }
     for (const { target, img, link, ttl } of tiles) {
       try {
-        const parent = await waitForTile(target);
-        if (!parent) continue;
-
-        if (link) {
-          const anchor = parent.querySelector('a');
-          if (anchor) anchor.href = link;
-          else console.warn('[tiles] no <a> found inside tile for target:', target);
+        const anchor = document.querySelector(`[href='${target}']`);
+        if (!anchor) {
+          console.warn('[tiles] target not found:', target);
+          continue;
         }
 
+        if (link) anchor.href = link;
+
         if (img) {
+          const applyBg = (url) => {
+            anchor.style.backgroundImage = `url('${url}')`;
+            anchor.style.backgroundSize = 'cover';
+            anchor.style.backgroundPosition = 'center';
+          };
           try {
             const dataUri = await Config._tileImgFetch(img, ttl);
-            parent.style.backgroundImage = `url(${dataUri})`;
+            applyBg(dataUri);
           } catch (fetchErr) {
             console.warn('[tiles] image fetch failed, falling back to direct URL:', img, fetchErr);
-            parent.style.backgroundImage = `url(${img})`;
+            applyBg(img);
           }
         }
 
