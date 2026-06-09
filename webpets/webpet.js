@@ -1,4 +1,4 @@
-/**!!!
+/**
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -1518,8 +1518,11 @@
     // When chasing a followTarget, only go idle when close enough to nibble (tight radius).
     // Using the full idleDist (48px) caused all rats to idle as soon as they crowded near
     // the cheese — even ones whose targetX was the cheese but were still far away from it.
-    var isDistractedWander = followTarget && c.distraction > 0 && ts < s.distractionUntil && s.distractionTargetX !== null;
-    var idleThreshold = (followTarget && !isDistractedWander) ? 12 : c.idleDist;
+    // When following any target (cheese or distraction wander), use a tight nibble
+    // radius so rats only stop when actually on top of the destination.
+    // The old idleDist (48px) was measured against the cheese position, causing rats
+    // to idle anywhere within a 48px halo — including ones still far across the screen.
+    var idleThreshold = followTarget ? 12 : c.idleDist;
     var idle  = distX < idleThreshold;
     console.debug('[webpet:' + this.name + '] tick x=' + x.toFixed(1) + ' targetX=' + targetX.toFixed(1) + ' distX=' + distX.toFixed(1) + ' idle=' + idle + ' idleThreshold=' + idleThreshold + ' movementPauseUntil=' + s.movementPauseUntil.toFixed(0) + ' ts=' + ts.toFixed(0));
 
