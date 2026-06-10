@@ -299,13 +299,12 @@ class Config { //update no chode
       // 50px tall, inline so it sits beside the name text
       img.style.cssText = [
         'display: inline-block',
-        'width: 50px',
-        'height: 50px',
+        'width: 55px',
+        'height: 55px',
         'object-fit: cover',
         'object-position: center top',
         'vertical-align: middle',
         'margin-right: 6px',
-        'border-radius: 4px',
       ].join('; ');
 
       // Insert before the <p> name element
