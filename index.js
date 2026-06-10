@@ -1,4 +1,4 @@
-class Config { //update!
+class Config { //update
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -30,12 +30,28 @@ class Config { //update!
 
         const userId = window.schoolboxUser?.id;
         Array.from(document.querySelectorAll('img'))
-          .filter(e => (e.getAttribute('src') ?? '').includes(`/portrait.php?id=${userId}`))
+          .filter(e => Config._isOwnPortrait(e, userId))
           .forEach(e => { e.src = chode; e.srcset = ''; });
       }
     } catch (e) {
       alert("An error occured when running applyavatars");
     }
+  }
+
+  // Returns true if an <img> element is the current user's portrait.
+  // On /search/user/{id} pages Schoolbox renders the portrait with id=0
+  // instead of the real user ID, so we match both.
+  static _isOwnPortrait(el, userId) {
+    const src = el.getAttribute('src') ?? '';
+    if (src.includes(`/portrait.php?id=${userId}`)) return true;
+    // On the user profile page (/search/user/{id}) the portrait uses id=0
+    if (src.includes('/portrait.php?id=0') && Config._isOwnProfilePage(userId)) return true;
+    return false;
+  }
+
+  // Returns true when the current page is the logged-in user's own profile page.
+  static _isOwnProfilePage(userId) {
+    return window.location.pathname === `/search/user/${userId}`;
   }
 
   // Preloads an image URL and swaps it into all matching <img> elements once loaded.
@@ -68,7 +84,7 @@ class Config { //update!
       if (freshChode && freshChode !== cachedChode) {
         const userId = window.schoolboxUser?.id;
         const portraits = Array.from(document.querySelectorAll('img'))
-          .filter(e => (e.getAttribute('src') ?? '').includes(`/portrait.php?id=${userId}`));
+          .filter(e => Config._isOwnPortrait(e, userId));
         Config._swapAvatarWhenReady(portraits, freshChode);
       }
     } catch (e) {
