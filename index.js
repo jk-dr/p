@@ -31,7 +31,7 @@ class Config { //update
         const userId = window.schoolboxUser?.id;
         Array.from(document.querySelectorAll('img'))
           .filter(e => (e.getAttribute('src') ?? '').includes(`/portrait.php?id=${userId}`))
-          .forEach(e => { e.src = chode; e.srcset = ''; });
+          .forEach(e => { e.src = pfp; e.srcset = ''; });
       }
     } catch (e) {
       alert("An error occured when running applyavatars");
