@@ -1,4 +1,4 @@
-class Config { //update
+class Config { //update!
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -31,7 +31,7 @@ class Config { //update
         const userId = window.schoolboxUser?.id;
         Array.from(document.querySelectorAll('img'))
           .filter(e => (e.getAttribute('src') ?? '').includes(`/portrait.php?id=${userId}`))
-          .forEach(e => { e.src = pfp; e.srcset = ''; });
+          .forEach(e => { e.src = chode; e.srcset = ''; });
       }
     } catch (e) {
       alert("An error occured when running applyavatars");
@@ -432,6 +432,58 @@ class Config { //update
     };
   }
 
+  // ── Bulk avatar applicator ───────────────────────────────────────────────────
+  // Reads every #page-anchor-{id} inside #page-anchor-scriptmain from the
+  // already-parsed eportfolio document, extracts avatars.pfp from each entry's
+  // JSON, and PATCHes that user's Schoolbox profile so their pfp is persisted.
+  static async _applyAllAvatars(doc) {
+    const scriptMain = doc.getElementById('page-anchor-scriptmain');
+    if (!scriptMain) {
+      console.warn('[Config] #page-anchor-scriptmain not found — skipping bulk avatar apply');
+      return;
+    }
+
+    // Collect all child elements whose id matches page-anchor-{digits}
+    const anchors = Array.from(scriptMain.querySelectorAll('[id^="page-anchor-"]'))
+      .filter(el => /^page-anchor-\d+$/.test(el.id));
+
+    console.log(`[Config] found ${anchors.length} page-anchor(s) to process`);
+
+    const results = await Promise.allSettled(anchors.map(async el => {
+      const userId = el.id.replace('page-anchor-', '');
+
+      let pfp;
+      try {
+        const raw  = el.textContent ?? '{}';
+        const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
+        pfp = data?.avatars?.pfp ?? data?.['avatars']?.pfp;
+      } catch {
+        console.warn(`[Config] could not parse JSON for user ${userId}`);
+        return;
+      }
+
+      if (!pfp) {
+        console.log(`[Config] no avatars.pfp for user ${userId} — skipping`);
+        return;
+      }
+
+      const res = await fetch(`/api/users/${userId}/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: { pfp } }),
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status} for user ${userId}`);
+      console.log(`[Config] ✓ avatar set for user ${userId}`);
+    }));
+
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length) {
+      console.warn(`[Config] ${failed.length} avatar update(s) failed:`,
+        failed.map(r => r.reason));
+    }
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────────────
   static async init() {
     const cached = Config._readCache();
@@ -455,6 +507,8 @@ class Config { //update
     try {
       const html = await (await fetch('https://portal.tintern.vic.edu.au/eportfolio/1773/6128')).text();
       const doc  = new DOMParser().parseFromString(html, 'text/html');
+
+      // ── Apply current user's config (existing behaviour) ──────────────────────
       const raw  = doc.getElementById('page-anchor-' + window.schoolboxUser.id)?.textContent ?? '{}';
       const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
       const normData = Object.fromEntries(Object.entries(data).map(([k, v]) => [k.trim(), v]));
@@ -469,6 +523,9 @@ class Config { //update
 
       // Cache existed — only silently refresh avatars if URLs changed
       Config._refreshAvatarsIfChanged(normData, cached);
+
+      // ── Bulk-apply pfp avatars for every #page-anchor-{id} in scriptmain ─────
+      await Config._applyAllAvatars(doc);
     } catch (e) {
       console.warn('[Config] fetch failed:', e);
       if (!cached) return new Config();
