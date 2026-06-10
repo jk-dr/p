@@ -1,4 +1,4 @@
-class Config { //update
+class Config { //update!
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -12,6 +12,7 @@ class Config { //update
       this._initPetsAndBall();
       console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject));
       this._cleanNotifications();
+      Config._applyClassListPortraits();
     }
   }
 
@@ -238,6 +239,54 @@ class Config { //update
       alert('An error occured when initialising webpets/webball :/');
       console.error(e);
     }
+  }
+
+  // ── Class List Portraits ─────────────────────────────────────────────────────
+  // Injects a square portrait image into every class-list card, mirroring the
+  // layout used for the Pastoral Mentor (James Henderson) component.
+  //
+  // Each student card has an <a href="/search/user/{id}"> — we extract the ID,
+  // build the standard portrait URL, and prepend an <img> exactly like the
+  // teacher card does.
+  static _applyClassListPortraits() {
+    // Selector targets the class list component's student links
+    const studentLinks = document.querySelectorAll(
+      '[data-test^="class-list-component-"]'
+    );
+
+    studentLinks.forEach(pEl => {
+      // pEl is the <p data-test="class-list-component-{id}"> element
+      const anchor = pEl.closest('a[href]');
+      if (!anchor) return;
+
+      // Extract user ID from href e.g. /search/user/6449
+      const match = anchor.getAttribute('href').match(/\/search\/user\/(\d+)/);
+      if (!match) return;
+      const userId = match[1];
+
+      // Don't add twice if already injected
+      if (anchor.querySelector('img[data-portrait-injected]')) return;
+
+      const img = document.createElement('img');
+      img.src = `/storage/portrait.php?id=${userId}`;
+      img.alt = pEl.textContent.trim();
+      img.setAttribute('data-portrait-injected', '1');
+
+      // Style to match the James Henderson teacher card portrait:
+      // square crop, full card width, sits above the name text
+      img.style.cssText = [
+        'display: block',
+        'width: 100%',
+        'aspect-ratio: 1 / 1',
+        'object-fit: cover',
+        'object-position: center top',
+      ].join('; ');
+
+      // Insert before the <p> name element so image appears on top
+      anchor.insertBefore(img, pEl);
+    });
+
+    console.log(`[Config] ✓ class list portraits injected (${studentLinks.length})`);
   }
 
   _cleanNotifications() {
@@ -509,6 +558,9 @@ class Config { //update
       Config._applyAvatarsFromData(cached);
       console.log('[Config] avatars applied from cache');
     }
+
+    // Always inject class list portraits (no data dependency — just DOM + portrait URLs)
+    Config._applyClassListPortraits();
 
     // Full Config from cache (pets, ball, dynamic_inject, etc.)
     if (cached) {
