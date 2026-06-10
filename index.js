@@ -28,10 +28,12 @@ class Config { //update
         document.querySelector('#profile-drop img').src = pfp;
         document.querySelector('#profile-accordion img').src = pfp;
 
-        const userId = window.schoolboxUser?.id;
-        Array.from(document.querySelectorAll('img'))
-          .filter(e => Config._isOwnPortrait(e, userId))
-          .forEach(e => { e.src = chode; e.srcset = ''; });
+        if (chode) {
+          const userId = window.schoolboxUser?.id;
+          Array.from(document.querySelectorAll('img'))
+            .filter(e => Config._isOwnPortrait(e, userId))
+            .forEach(e => { e.src = chode; e.srcset = ''; });
+        }
       }
     } catch (e) {
       alert("An error occured when running applyavatars");
@@ -296,13 +298,12 @@ class Config { //update
       // 50px tall, inline so it sits beside the name text
       img.style.cssText = [
         'display: inline-block',
-        'width: 50px',
-        'height: 50px',
+        'width: 55px',
+        'height: 55px',
         'object-fit: cover',
         'object-position: center top',
         'vertical-align: middle',
-        'margin-right: 6px',
-        'border-radius: 4px',
+        'margin-right: 6px'
       ].join('; ');
 
       // Insert before the <p> name element
