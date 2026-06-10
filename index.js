@@ -1,4 +1,4 @@
-class Config { //update
+class Config { //update!
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -41,13 +41,18 @@ class Config { //update
   }
 
   // Returns true if an <img> element is the current user's portrait.
-  // On /search/user/{id} pages Schoolbox renders the portrait with id=0
-  // instead of the real user ID, so we match both.
+  // Matches three cases:
+  //   1. portrait.php?id={userId}  — standard inline portrait (e.g. class list, header)
+  //   2. portrait.php?id=0         — profile pages for other users render id=0
+  //   3. img.profile-image         — full-size portrait on a profile page
+  // Cases 2 and 3 are only considered when on the user's own profile page.
   static _isOwnPortrait(el, userId) {
     const src = el.getAttribute('src') ?? '';
     if (src.includes(`/portrait.php?id=${userId}`)) return true;
-    // On the user profile page (/search/user/{id}) the portrait uses id=0
-    if (src.includes('/portrait.php?id=0') && Config._isOwnProfilePage(userId)) return true;
+    if (Config._isOwnProfilePage(userId)) {
+      if (src.includes('/portrait.php?id=0')) return true;
+      if (el.classList.contains('profile-image') && src.includes('/portrait.php?id=')) return true;
+    }
     return false;
   }
 
@@ -563,14 +568,16 @@ class Config { //update
     }
 
     // Collect portraits to swap.
-    // Normally the profile page renders portraits as id=0, but when viewing
-    // your own profile the server uses the real id (e.g. id=1773), so we
-    // match both patterns — id=0 always, and id={userId} when it's our own page.
+    // Three cases handled:
+    //   id=0             — other users' profile pages always render portrait as id=0
+    //   id={viewedUserId} — own profile page uses the real ID
+    //   img.profile-image — full-size portrait element on any profile page
     const isOwnProfile = Config._isOwnProfilePage(window.schoolboxUser?.id);
     const targets = Array.from(document.querySelectorAll('img')).filter(el => {
       const src = el.getAttribute('src') ?? '';
       if (src.includes('/portrait.php?id=0')) return true;
       if (isOwnProfile && src.includes(`/portrait.php?id=${viewedUserId}`)) return true;
+      if (el.classList.contains('profile-image') && src.includes('/portrait.php?id=')) return true;
       return false;
     });
 
