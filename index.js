@@ -1,4 +1,4 @@
-class Config { //update
+class Config { //updatewaekogrkg
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
