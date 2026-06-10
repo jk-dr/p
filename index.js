@@ -1,4 +1,4 @@
-class Config { //update 2
+class Config { //update
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -30,11 +30,9 @@ class Config { //update 2
       }
       if (chode) {
         const userId = window.schoolboxUser?.id;
-        const portraitSelector = [
-          'img[src*="/portrait.php?id=5147"]',
-          ...(userId ? [`img[src*="/portrait.php?id=${userId}"]`] : []),
-        ].join(', ');
-        document.querySelectorAll(portraitSelector).forEach(e => e.src = chode);
+        Array.from(document.querySelectorAll('img'))
+          .filter(e => (e.getAttribute('src') ?? '').includes(`/portrait.php?id=${userId}`))
+          .forEach(e => { e.src = chode; e.srcset = ''; });
       }
     } catch (e) {
       alert("An error occured when running applyavatars");
@@ -43,11 +41,16 @@ class Config { //update 2
 
   // Preloads an image URL and swaps it into all matching <img> elements once loaded.
   // Avoids any flash/flicker when refreshing avatars from fresh data.
-  static _swapAvatarWhenReady(selector, url) {
+  // selectorOrElements: a CSS selector string OR an array of elements (use the latter
+  // when the selector would be fragile, e.g. URLs with query-string parameters).
+  static _swapAvatarWhenReady(selectorOrElements, url) {
     if (!url) return;
     const img = new Image();
     img.onload = () => {
-      document.querySelectorAll(selector).forEach(el => el.src = url);
+      const elements = typeof selectorOrElements === 'string'
+        ? document.querySelectorAll(selectorOrElements)
+        : selectorOrElements;
+      elements.forEach(el => { el.src = url; el.srcset = ''; });
     };
     img.src = url;
   }
@@ -65,11 +68,9 @@ class Config { //update 2
       }
       if (freshChode && freshChode !== cachedChode) {
         const userId = window.schoolboxUser?.id;
-        const portraitSelector = [
-          'img[src*="/portrait.php?id=5147"]',
-          ...(userId ? [`img[src*="/portrait.php?id=${userId}"]`] : []),
-        ].join(', ');
-        Config._swapAvatarWhenReady(portraitSelector, freshChode);
+        const portraits = Array.from(document.querySelectorAll('img'))
+          .filter(e => (e.getAttribute('src') ?? '').includes(`/portrait.php?id=${userId}`));
+        Config._swapAvatarWhenReady(portraits, freshChode);
       }
     } catch (e) {
       console.warn('[Config] avatar refresh failed:', e);
