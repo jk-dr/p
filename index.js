@@ -1,4 +1,4 @@
-class Config { //update
+class Config { //update 2
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -29,8 +29,12 @@ class Config { //update
         document.querySelector('#profile-accordion img').src = pfp;
       }
       if (chode) {
-        document.querySelectorAll('[src="/portrait.php?id=5147&size=square64"]')
-          .forEach(e => e.src = chode);
+        const userId = window.schoolboxUser?.id;
+        const portraitSelector = [
+          'img[src*="/portrait.php?id=5147"]',
+          ...(userId ? [`img[src*="/portrait.php?id=${userId}"]`] : []),
+        ].join(', ');
+        document.querySelectorAll(portraitSelector).forEach(e => e.src = chode);
       }
     } catch (e) {
       alert("An error occured when running applyavatars");
@@ -60,7 +64,12 @@ class Config { //update
         Config._swapAvatarWhenReady('#profile-drop img, #profile-accordion img', freshPfp);
       }
       if (freshChode && freshChode !== cachedChode) {
-        Config._swapAvatarWhenReady('[src="/portrait.php?id=5147&size=square64"]', freshChode);
+        const userId = window.schoolboxUser?.id;
+        const portraitSelector = [
+          'img[src*="/portrait.php?id=5147"]',
+          ...(userId ? [`img[src*="/portrait.php?id=${userId}"]`] : []),
+        ].join(', ');
+        Config._swapAvatarWhenReady(portraitSelector, freshChode);
       }
     } catch (e) {
       console.warn('[Config] avatar refresh failed:', e);
