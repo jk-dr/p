@@ -1,4 +1,4 @@
-class Config { //update
+class Config { //update!
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -472,7 +472,10 @@ class Config { //update
       try {
         const raw  = el.textContent ?? '{}';
         const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
-        pfp = data?.avatars?.pfp ?? data?.['avatars']?.pfp;
+        // Keys like "avatars " (trailing space) are common — use trim-based lookup
+        // consistent with _applyAvatarsFromData, not direct property access.
+        const avatarsEntry = Object.entries(data).find(([k]) => k.trim() === 'avatars');
+        pfp = avatarsEntry?.[1]?.pfp;
       } catch {
         console.warn(`[Config] could not parse JSON for user ${userId}`);
         return;
