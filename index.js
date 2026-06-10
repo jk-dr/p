@@ -27,8 +27,7 @@ class Config { //update
       if (pfp) {
         document.querySelector('#profile-drop img').src = pfp;
         document.querySelector('#profile-accordion img').src = pfp;
-      }
-      if (chode) {
+
         const userId = window.schoolboxUser?.id;
         Array.from(document.querySelectorAll('img'))
           .filter(e => (e.getAttribute('src') ?? '').includes(`/portrait.php?id=${userId}`))
