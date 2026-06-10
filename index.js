@@ -1,4 +1,4 @@
-class Config { //update no chode
+class Config { //update no chode!
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -564,14 +564,13 @@ class Config { //update no chode
 
     // Collect portraits to swap.
     // Three cases handled:
-    //   id=0             — other users' profile pages always render portrait as id=0
-    //   id={viewedUserId} — own profile page uses the real ID
+    //   id=0              — some profile pages render the portrait as id=0
+    //   id={viewedUserId} — profile pages may also render with the user's real ID
     //   img.profile-image — full-size portrait element on any profile page
-    const isOwnProfile = Config._isOwnProfilePage(window.schoolboxUser?.id);
     const targets = Array.from(document.querySelectorAll('img')).filter(el => {
       const src = el.getAttribute('src') ?? '';
       if (src.includes('/portrait.php?id=0')) return true;
-      if (isOwnProfile && src.includes(`/portrait.php?id=${viewedUserId}`)) return true;
+      if (src.includes(`/portrait.php?id=${viewedUserId}`)) return true;
       if (el.classList.contains('profile-image') && src.includes('/portrait.php?id=')) return true;
       return false;
     });
