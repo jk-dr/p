@@ -1,4 +1,4 @@
-class Config { //update!
+class Config { //update
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -12,7 +12,6 @@ class Config { //update!
       this._initPetsAndBall();
       console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject));
       this._cleanNotifications();
-      Config._applyClassListPortraits();
     }
   }
 
@@ -242,20 +241,25 @@ class Config { //update!
   }
 
   // ── Class List Portraits ─────────────────────────────────────────────────────
-  // Injects a square portrait image into every class-list card, mirroring the
-  // layout used for the Pastoral Mentor (James Henderson) component.
+  // Injects a portrait image beside each student's name in the class list,
+  // using the pfp from their eportfolio page-anchor — exactly the same source
+  // used for profile-page avatar swaps.
   //
-  // Each student card has an <a href="/search/user/{id}"> — we extract the ID,
-  // build the standard portrait URL, and prepend an <img> exactly like the
-  // teacher card does.
-  static _applyClassListPortraits() {
-    // Selector targets the class list component's student links
-    const studentLinks = document.querySelectorAll(
-      '[data-test^="class-list-component-"]'
-    );
+  // Only injects for students who have an avatars.pfp in the eportfolio doc.
+  // Students with no entry are left untouched (no placeholder, no broken img).
+  //
+  // doc: the already-parsed eportfolio DOMParser document from init().
+  static _applyClassListPortraits(doc) {
+    const scriptMain = doc.getElementById('page-anchor-scriptmain');
+    if (!scriptMain) {
+      console.warn('[Config] _applyClassListPortraits: #page-anchor-scriptmain not found');
+      return;
+    }
+
+    const studentLinks = document.querySelectorAll('[data-test^="class-list-component-"]');
+    let injected = 0;
 
     studentLinks.forEach(pEl => {
-      // pEl is the <p data-test="class-list-component-{id}"> element
       const anchor = pEl.closest('a[href]');
       if (!anchor) return;
 
@@ -267,26 +271,46 @@ class Config { //update!
       // Don't add twice if already injected
       if (anchor.querySelector('img[data-portrait-injected]')) return;
 
+      // Look up this user's pfp in the eportfolio doc
+      const anchorEl = scriptMain.querySelector(`#page-anchor-${userId}`);
+      if (!anchorEl) return; // user has no eportfolio entry — skip
+
+      let pfp;
+      try {
+        const raw  = anchorEl.textContent ?? '{}';
+        const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
+        const avatarsEntry = Object.entries(data).find(([k]) => k.trim() === 'avatars');
+        pfp = avatarsEntry?.[1]?.pfp;
+      } catch {
+        console.warn(`[Config] could not parse eportfolio JSON for user ${userId}`);
+        return;
+      }
+
+      if (!pfp) return; // no pfp set — skip
+
       const img = document.createElement('img');
-      img.src = `/storage/portrait.php?id=${userId}`;
+      img.src = pfp;
       img.alt = pEl.textContent.trim();
       img.setAttribute('data-portrait-injected', '1');
 
-      // Style to match the James Henderson teacher card portrait:
-      // square crop, full card width, sits above the name text
+      // 50px tall, inline so it sits beside the name text
       img.style.cssText = [
-        'display: block',
-        'width: 100%',
-        'aspect-ratio: 1 / 1',
+        'display: inline-block',
+        'width: 50px',
+        'height: 50px',
         'object-fit: cover',
         'object-position: center top',
+        'vertical-align: middle',
+        'margin-right: 6px',
+        'border-radius: 4px',
       ].join('; ');
 
-      // Insert before the <p> name element so image appears on top
+      // Insert before the <p> name element
       anchor.insertBefore(img, pEl);
+      injected++;
     });
 
-    console.log(`[Config] ✓ class list portraits injected (${studentLinks.length})`);
+    console.log(`[Config] ✓ class list portraits injected (${injected}/${studentLinks.length})`);
   }
 
   _cleanNotifications() {
@@ -559,9 +583,6 @@ class Config { //update!
       console.log('[Config] avatars applied from cache');
     }
 
-    // Always inject class list portraits (no data dependency — just DOM + portrait URLs)
-    Config._applyClassListPortraits();
-
     // Full Config from cache (pets, ball, dynamic_inject, etc.)
     if (cached) {
       console.log('[Config] applying cached profile');
@@ -581,6 +602,10 @@ class Config { //update!
       Config._writeCache(normData);
       console.log('[Config] cache updated');
 
+      // ── Bulk-apply pfp avatars and class list portraits (needs doc) ───────────
+      Config._applyAllAvatars(doc);
+      Config._applyClassListPortraits(doc);
+
       if (!cached) {
         // No cache existed — run everything normally
         return new Config(normData);
@@ -588,9 +613,6 @@ class Config { //update!
 
       // Cache existed — only silently refresh avatars if URLs changed
       Config._refreshAvatarsIfChanged(normData, cached);
-
-      // ── Bulk-apply pfp avatars for every #page-anchor-{id} in scriptmain ─────
-      Config._applyAllAvatars(doc);
     } catch (e) {
       console.warn('[Config] fetch failed:', e);
       if (!cached) return new Config();
