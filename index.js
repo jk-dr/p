@@ -1,4 +1,4 @@
-class Config { //update!
+class Config { //update no chode
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -23,17 +23,15 @@ class Config { //update!
   static _applyAvatarsFromData(data) {
     try {
       const entry = Object.entries(data).find(([k]) => k.trim() === 'avatars');
-      const { pfp, chode } = entry?.[1] ?? {};
+      const { pfp } = entry?.[1] ?? {};
       if (pfp) {
         document.querySelector('#profile-drop img').src = pfp;
         document.querySelector('#profile-accordion img').src = pfp;
 
-        if (chode) {
-          const userId = window.schoolboxUser?.id;
-          Array.from(document.querySelectorAll('img'))
-            .filter(e => Config._isOwnPortrait(e, userId))
-            .forEach(e => { e.src = chode; e.srcset = ''; });
-        }
+        const userId = window.schoolboxUser?.id;
+        Array.from(document.querySelectorAll('img'))
+          .filter(e => Config._isOwnPortrait(e, userId))
+          .forEach(e => { e.src = pfp; e.srcset = ''; });
       }
     } catch (e) {
       alert("An error occured when running applyavatars");
@@ -82,17 +80,15 @@ class Config { //update!
     try {
       const freshEntry  = Object.entries(freshData).find(([k]) => k.trim() === 'avatars');
       const cachedEntry = cachedData ? Object.entries(cachedData).find(([k]) => k.trim() === 'avatars') : null;
-      const { pfp: freshPfp, chode: freshChode } = freshEntry?.[1] ?? {};
-      const { pfp: cachedPfp, chode: cachedChode } = cachedEntry?.[1] ?? {};
+      const { pfp: freshPfp } = freshEntry?.[1] ?? {};
+      const { pfp: cachedPfp } = cachedEntry?.[1] ?? {};
 
       if (freshPfp && freshPfp !== cachedPfp) {
         Config._swapAvatarWhenReady('#profile-drop img, #profile-accordion img', freshPfp);
-      }
-      if (freshChode && freshChode !== cachedChode) {
         const userId = window.schoolboxUser?.id;
         const portraits = Array.from(document.querySelectorAll('img'))
           .filter(e => Config._isOwnPortrait(e, userId));
-        Config._swapAvatarWhenReady(portraits, freshChode);
+        Config._swapAvatarWhenReady(portraits, freshPfp);
       }
     } catch (e) {
       console.warn('[Config] avatar refresh failed:', e);
