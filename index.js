@@ -1,4 +1,4 @@
-class Config { //updatewaekogrkg
+class Config { //update
   constructor(data = {}) {
     this.data = data;
     if (window.schoolboxUser.impersonated) {
@@ -298,12 +298,13 @@ class Config { //updatewaekogrkg
       // 50px tall, inline so it sits beside the name text
       img.style.cssText = [
         'display: inline-block',
-        'width: 55px',
-        'height: 55px',
+        'width: 50px',
+        'height: 50px',
         'object-fit: cover',
         'object-position: center top',
         'vertical-align: middle',
-        'margin-right: 6px'
+        'margin-right: 6px',
+        'border-radius: 4px',
       ].join('; ');
 
       // Insert before the <p> name element
@@ -561,13 +562,19 @@ class Config { //updatewaekogrkg
       return;
     }
 
-    // Swap every id=0 portrait on the page (the profile page renders the
-    // viewed user's portrait as id=0 regardless of who is logged in)
-    Config._swapAvatarWhenReady(
-      Array.from(document.querySelectorAll('img'))
-        .filter(el => (el.getAttribute('src') ?? '').includes('/portrait.php?id=0')),
-      pfp
-    );
+    // Collect portraits to swap.
+    // Normally the profile page renders portraits as id=0, but when viewing
+    // your own profile the server uses the real id (e.g. id=1773), so we
+    // match both patterns — id=0 always, and id={userId} when it's our own page.
+    const isOwnProfile = Config._isOwnProfilePage(window.schoolboxUser?.id);
+    const targets = Array.from(document.querySelectorAll('img')).filter(el => {
+      const src = el.getAttribute('src') ?? '';
+      if (src.includes('/portrait.php?id=0')) return true;
+      if (isOwnProfile && src.includes(`/portrait.php?id=${viewedUserId}`)) return true;
+      return false;
+    });
+
+    Config._swapAvatarWhenReady(targets, pfp);
     console.log(`[Config] ✓ applied pfp for viewed user ${viewedUserId}`);
   }
 
