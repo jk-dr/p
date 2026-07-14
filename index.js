@@ -81,6 +81,43 @@ class Config { //update no chode!
       alert("An error occured when running applyCustomName");
     }
   }
+  // Looks up a given user's customName entry from the eportfolio doc's
+  // page-anchor-{userId} JSON blob. Returns null if not found/parseable.
+  static _getCustomNameForUser(doc, userId) {
+    const scriptMain = doc.getElementById('page-anchor-scriptmain');
+    if (!scriptMain) return null;
+
+    const anchorEl = scriptMain.querySelector(`#page-anchor-${userId}`);
+    if (!anchorEl) return null;
+
+    try {
+      const raw  = anchorEl.textContent ?? '{}';
+      const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
+      const entry = Object.entries(data).find(([k]) => k.trim() === 'customName');
+      return entry?.[1] ?? null;
+    } catch {
+      console.warn(`[Config] could not parse eportfolio JSON for user ${userId}`);
+      return null;
+    }
+  }
+
+  // If the current page is /search/user/{id}, applies that viewed user's
+  // own customName (original -> new) across the page.
+  static _applyAllCustomNames(doc) {
+    const profileMatch = window.location.pathname.match(/^\/search\/user\/(\d+)$/);
+    if (!profileMatch) return;
+
+    const viewedUserId = profileMatch[1];
+    const customName = Config._getCustomNameForUser(doc, viewedUserId);
+
+    if (!customName?.original || !customName?.new) {
+      console.log(`[Config] no customName for viewed user ${viewedUserId} — skipping`);
+      return;
+    }
+
+    Config._applyCustomNameFromData({ customName });
+    console.log(`[Config] ✓ applied customName for viewed user ${viewedUserId}`);
+  }
   // Returns true when the current page is the logged-in user's own profile page.
   static _isOwnProfilePage(userId) {
     return window.location.pathname === `/search/user/${userId}`;
