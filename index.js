@@ -55,7 +55,7 @@ class Config { //update no chode!
     return false;
   }
 
-  static _applyCustomName() {
+  _applyCustomName() {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const nodes = [];
     let n;
