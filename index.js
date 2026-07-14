@@ -62,7 +62,7 @@ class Config { //update no chode!
     while (n = walker.nextNode()) nodes.push(n);
   
     nodes.forEach(n => {
-      n.textContent = n.textContent.split(JSON.stringify(this.data.customName.original).join(this.data.customName.new);
+      n.textContent = n.textContent.split(JSON.stringify(this.data.customName.original)).join(this.data.customName.new);
     });
   }
 
