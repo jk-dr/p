@@ -708,7 +708,7 @@ static _applyAllCustomNamesBulk(doc) {
 
       // ── Bulk-apply pfp avatars and class list portraits (needs doc) ───────────
       Config._applyAllAvatars(doc);
-      Config._applyAllCustomNames(doc)
+      Config._applyAllCustomNamesBulk(doc);
       Config._applyClassListPortraits(doc);
 
       if (!cached) {
