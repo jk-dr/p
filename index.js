@@ -317,11 +317,11 @@ class Config { //update no chode!
 
   _cleanNotifications() {
     document.querySelector('#notificationselector_ext')
-      ?.closest('li.actions-small-1.status-read')
+      ?.closest('li.actions-small-1')
       ?.remove();
 
     document.querySelector('#webpets')
-      ?.closest('li.actions-small-1.status-read')
+      ?.closest('li.actions-small-1')
       ?.remove();
   }
 
