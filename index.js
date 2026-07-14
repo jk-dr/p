@@ -35,7 +35,6 @@ class Config { //update no chode!
           .forEach(e => { e.src = pfp; e.srcset = ''; });
       }
     } catch (e) {
-      alert("An error occured when running applyavatars");
     }
   }
 
