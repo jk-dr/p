@@ -610,6 +610,7 @@ class Config { //update no chode!
   static async init() {
     const cached = Config._readCache();
 
+    Config._applyAllCustomNames(doc)
     // Expose window.cache immediately — dynamic_inject can use it
     Config._exposeWindowCache(cached);
 
