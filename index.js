@@ -1,4 +1,4 @@
-class Config { //update yes chode!
+class Config { //update no chode!
   constructor(data = {}) {
     this.data = data;
    
@@ -10,7 +10,6 @@ class Config { //update yes chode!
       this._initPetsAndBall();
       console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject));
       this._cleanNotifications();
-    }
   }
 
   _applyAvatars() {
