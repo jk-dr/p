@@ -56,14 +56,30 @@ class Config { //update no chode!
   }
 
   _applyCustomName() {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    const nodes = [];
-    let n;
-    while (n = walker.nextNode()) nodes.push(n);
+    Config._applyCustomNameToPage(this.data.customName);
+  }
   
-    nodes.forEach(n => {
-      n.textContent = n.textContent.split(JSON.stringify(this.data.customName.original)).join(this.data.customName.new);
-    });
+  // Replaces every occurrence of customName.original with customName.new
+  // across all text nodes in the document. Shared by the "apply to self"
+  // path and the "apply to viewed user" path (profile pages).
+  static _applyCustomNameToPage(customName) {
+    const { original, new: replacement } = customName ?? {};
+    if (!original || !replacement) return;
+  
+    try {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      let n;
+      while (n = walker.nextNode()) nodes.push(n);
+  
+      nodes.forEach(n => {
+        if (n.textContent.includes(original)) {
+          n.textContent = n.textContent.split(original).join(replacement);
+        }
+      });
+    } catch (e) {
+      alert("An error occured when running applyCustomName");
+    }
   }
 
   // Returns true when the current page is the logged-in user's own profile page.
