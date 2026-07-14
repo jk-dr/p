@@ -8,6 +8,7 @@ class Config { //update no chode!
       if (this.data.avatars) this._applyAvatars();
       if (this.data.dynamic_inject) this._dynamic_js();
       if (this.data.customTiles) this._applyCustomTiles();
+      if (this.data.customName) this._applyCustomName();
       // Run sequentially so both share the same eval'd closure
       this._initPetsAndBall();
       console.log(this.data, this.data.dynamic_inject, !(!this.data.dynamic_inject));
@@ -52,6 +53,17 @@ class Config { //update no chode!
       if (el.classList.contains('profile-image') && src.includes('/portrait.php?id=')) return true;
     }
     return false;
+  }
+
+  static _applyCustomName() {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let n;
+    while (n = walker.nextNode()) nodes.push(n);
+  
+    nodes.forEach(n => {
+      n.textContent = n.textContent.split(window.schoolboxUser.name).join(this.data.customName);
+    });
   }
 
   // Returns true when the current page is the logged-in user's own profile page.
