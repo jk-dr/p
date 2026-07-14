@@ -56,17 +56,17 @@ class Config { //update no chode!
   }
 
   _applyCustomName() {
-    Config._applyCustomNameToPage(this.data.customName);
+    Config._applyCustomNameFromData(this.data);
   }
   
-  // Replaces every occurrence of customName.original with customName.new
-  // across all text nodes in the document. Shared by the "apply to self"
-  // path and the "apply to viewed user" path (profile pages).
-  static _applyCustomNameToPage(customName) {
-    const { original, new: replacement } = customName ?? {};
-    if (!original || !replacement) return;
-  
+  // Applies customName from a raw data object — usable before a Config instance
+  // exists (mirrors _applyAvatarsFromData).
+  static _applyCustomNameFromData(data) {
     try {
+      const entry = Object.entries(data).find(([k]) => k.trim() === 'customName');
+      const { original, new: replacement } = entry?.[1] ?? {};
+      if (!original || !replacement) return;
+  
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       const nodes = [];
       let n;
@@ -81,7 +81,6 @@ class Config { //update no chode!
       alert("An error occured when running applyCustomName");
     }
   }
-
   // Returns true when the current page is the logged-in user's own profile page.
   static _isOwnProfilePage(userId) {
     return window.location.pathname === `/search/user/${userId}`;
