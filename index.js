@@ -610,7 +610,7 @@ class Config { //update no chode!
   static async init() {
     const cached = Config._readCache();
 
-    Config._applyAllCustomNames(doc)
+    
     // Expose window.cache immediately — dynamic_inject can use it
     Config._exposeWindowCache(cached);
 
@@ -641,6 +641,7 @@ class Config { //update no chode!
 
       // ── Bulk-apply pfp avatars and class list portraits (needs doc) ───────────
       Config._applyAllAvatars(doc);
+      Config._applyAllCustomNames(doc)
       Config._applyClassListPortraits(doc);
 
       if (!cached) {
