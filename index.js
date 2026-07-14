@@ -1,10 +1,7 @@
-class Config { //update no chode!
+class Config { //update yes chode!
   constructor(data = {}) {
     this.data = data;
-    if (window.schoolboxUser.impersonated) {
-      console.error("A teacher / admin is using the current window and we are going to ignore the script entirely");
-      console.log("If you are actually seeing this and aware whats going on then report, or not")
-    } else {
+   
       if (this.data.avatars) this._applyAvatars();
       if (this.data.dynamic_inject) this._dynamic_js();
       if (this.data.customTiles) this._applyCustomTiles();
@@ -52,6 +49,32 @@ class Config { //update no chode!
       if (el.classList.contains('profile-image') && src.includes('/portrait.php?id=')) return true;
     }
     return false;
+  }
+
+  // Swaps the src (and clears srcset) on one or more <img> elements once they
+  // exist in the DOM. `target` can be a CSS selector string or an array/NodeList
+  // of elements already queried. Retries briefly since this can run right after
+  // a navigation, before the target nodes have rendered.
+  static _swapAvatarWhenReady(target, pfp, { retries = 10, delay = 250 } = {}) {
+    const attempt = (n) => {
+      const els = typeof target === 'string'
+        ? Array.from(document.querySelectorAll(target))
+        : Array.from(target ?? []);
+
+      if (els.length) {
+        els.forEach(el => { el.src = pfp; el.srcset = ''; });
+        console.log(`[Config] ✓ avatar swapped (${els.length} element(s))`);
+        return;
+      }
+
+      if (n < retries) {
+        setTimeout(() => attempt(n + 1), delay);
+      } else {
+        console.warn('[Config] _swapAvatarWhenReady: no matching elements found after retries, giving up', target);
+      }
+    };
+
+    attempt(0);
   }
 
   _applyCustomName() {
@@ -185,14 +208,6 @@ static _applyAllCustomNamesBulk(doc) {
       }
     } catch (e) {
       console.warn('[Config] avatar refresh failed:', e);
-    }
-  }
-
-  _dynamic_js() {
-    try {
-      eval(this.data.dynamic_inject)
-    } catch (e) {
-      alert("Dynamic code injection failed!");
     }
   }
 
