@@ -103,41 +103,71 @@ class Config { //update no chode!
 
   // If the current page is /search/user/{id}, applies that viewed user's
   // own customName (original -> new) across the page.
-  static _applyAllCustomNames(doc) {
-    const profileMatch = window.location.pathname.match(/^\/search\/user\/(\d+)$/);
-    if (!profileMatch) return;
+  // Scans every page-anchor-{userId} entry in the eportfolio doc, collects any
+// customName { original, new } pairs it finds, and replaces all occurrences
+// of each `original` with its `new` value across every text node on the page.
+static _applyAllCustomNamesBulk(doc) {
+  const scriptMain = doc.getElementById('page-anchor-scriptmain');
+  if (!scriptMain) {
+    console.warn('[Config] _applyAllCustomNamesBulk: #page-anchor-scriptmain not found');
+    return;
+  }
 
-    const viewedUserId = profileMatch[1];
-    const customName = Config._getCustomNameForUser(doc, viewedUserId);
+  // page-anchor elements are typically id="page-anchor-{userId}"
+  const anchors = scriptMain.querySelectorAll('[id^="page-anchor-"]');
+  const pairs = [];
 
-    if (!customName?.original || !customName?.new) {
-      console.log(`[Config] no customName for viewed user ${viewedUserId} — skipping`);
-      return;
+  anchors.forEach(anchorEl => {
+    try {
+      const raw  = anchorEl.textContent ?? '{}';
+      const data = JSON.parse(raw.replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim());
+      const entry = Object.entries(data).find(([k]) => k.trim() === 'customName');
+      const { original, new: replacement } = entry?.[1] ?? {};
+      if (original && replacement) {
+        pairs.push({ original: original.trim(), replacement });
+      }
+    } catch {
+      // not valid JSON / no customName — skip silently
     }
+  });
 
-    Config._applyCustomNameFromData({ customName });
-    console.log(`[Config] ✓ applied customName for viewed user ${viewedUserId}`);
-  }
-  // Returns true when the current page is the logged-in user's own profile page.
-  static _isOwnProfilePage(userId) {
-    return window.location.pathname === `/search/user/${userId}`;
+  if (!pairs.length) {
+    console.log('[Config] no customName entries found across users');
+    return;
   }
 
-  // Preloads an image URL and swaps it into all matching <img> elements once loaded.
-  // Avoids any flash/flicker when refreshing avatars from fresh data.
-  // selectorOrElements: a CSS selector string OR an array of elements (use the latter
-  // when the selector would be fragile, e.g. URLs with query-string parameters).
-  static _swapAvatarWhenReady(selectorOrElements, url) {
-    if (!url) return;
-    const img = new Image();
-    img.onload = () => {
-      const elements = typeof selectorOrElements === 'string'
-        ? document.querySelectorAll(selectorOrElements)
-        : selectorOrElements;
-      elements.forEach(el => { el.src = url; el.srcset = ''; });
-    };
-    img.src = url;
-  }
+  // Build one whitespace-tolerant regex per pair (handles &nbsp; between names)
+  const compiled = pairs.map(({ original, replacement }) => {
+    const escaped = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = escaped.replace(/\s+/g, '[\\s\\u00A0]+');
+    return { re: new RegExp(pattern, 'g'), replacement, original };
+  });
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  let n;
+  while (n = walker.nextNode()) nodes.push(n);
+
+  let totalReplacements = 0;
+  nodes.forEach(node => {
+    let text = node.textContent;
+    let changed = false;
+
+    compiled.forEach(({ re, replacement }) => {
+      re.lastIndex = 0;
+      if (re.test(text)) {
+        re.lastIndex = 0;
+        text = text.replace(re, replacement);
+        changed = true;
+        totalReplacements++;
+      }
+    });
+
+    if (changed) node.textContent = text;
+  });
+
+  console.log(`[Config] ✓ customName bulk replace: ${pairs.length} pair(s) found, ${totalReplacements} node replacement(s) made`);
+}
 
   // Silently update avatars in the background if the fresh data has different URLs.
   static _refreshAvatarsIfChanged(freshData, cachedData) {
