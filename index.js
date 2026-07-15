@@ -1,4 +1,4 @@
-class Config { //update no chode!
+/*class Config { //update no chode!
   constructor(data = {}) {
     this.data = data;
    
@@ -604,16 +604,16 @@ static _applyAllCustomNamesBulk(doc) {
   // call window.cache.read(), .write(), .clear(), or read window.cache.data.
   static _exposeWindowCache(initialData) {
     window.cache = {
-      /** The currently cached config data object (kept in sync with localStorage). */
+      /** The currently cached config data object (kept in sync with localStorage). 
       data: initialData ?? null,
 
-      /** Read the raw cached data (returns null if missing or expired). */
+      /** Read the raw cached data (returns null if missing or expired). 
       read() { return Config._readCache(); },
 
       /** Write arbitrary data into the cache (merges with existing by default).
        *  Pass replace=true to overwrite entirely.
        *  e.g. window.cache.write({ avatars: { pfp: '...' } })
-       */
+       
       write(patch, replace = false) {
         const base = replace ? {} : (Config._readCache() ?? {});
         const merged = { ...base, ...patch };
@@ -621,7 +621,7 @@ static _applyAllCustomNamesBulk(doc) {
         console.log('[cache] written', merged);
       },
 
-      /** Remove the cache entry entirely. Forces a fresh fetch next load. */
+      /** Remove the cache entry entirely. Forces a fresh fetch next load. 
       clear() {
         localStorage.removeItem(Config.CACHE_KEY);
         window.cache.data = null;
@@ -740,3 +740,4 @@ static _applyAllCustomNamesBulk(doc) {
 }
 
 (async () => { if (!window?.initIndexJs) { window.initIndexJs = true; await Config.init(); } })();
+*/
