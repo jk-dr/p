@@ -379,6 +379,9 @@
     });
 
     var hoverAction = prefixAction(rawHover);
+    // The real "holding the ball" pose shipped in the asset pack — used
+    // whenever this pet is carrying or pushing a WebBall.
+    var withBallAction = prefixAction('with_ball');
 
     // Merge species behaviour defaults under user-supplied options (user wins).
     var specBeh = spec.behaviour || {};
@@ -410,6 +413,7 @@
       idleDist:      options.idleDist != null ? +options.idleDist : 48,
       hoverDist:     options.hoverDist != null ? +options.hoverDist : 50,
       hoverAction:   hoverAction,
+      withBallAction: withBallAction,
       idlePauseMs:   options.idlePauseMs || { min: 1500, max: 2200 },
       followEntity:  options.followEntity || null,
       name:          entityName,
@@ -1584,8 +1588,14 @@
         if (s.ballLostInterestAt === null) {
           s.ballLostInterestAt = ts;
         } else if (ts - s.ballLostInterestAt >= BALL_LOSE_INTEREST_MS) {
-          // Countdown elapsed — drop the target for this tick
+          // Countdown elapsed — give up on it for now. Clear the permanent
+          // latch too (not just the countdown), so this pet naturally
+          // rediscovers and tries again later instead of ignoring the ball
+          // forever — it just takes another full approach-and-wait cycle,
+          // each with its own (low) chance to actually grab it.
+          if (c.followEntity === followTarget.name) c.followEntity = null;
           followTarget = null;
+          s.ballLostInterestAt = null;
         }
       }
     }
@@ -1641,12 +1651,11 @@
         }
 
         if (s.heldBallName === followTarget.name) {
-          // Just grabbed (or already hold) it this tick — strike a little
-          // "got it!" pose; next tick falls through to free-roam-with-ball.
+          // Just grabbed (or already hold) it this tick — play the real
+          // holding pose; next tick falls through to free-roam-with-ball.
           if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
           if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
-          var grabAction = c.hoverAction || (c.idleActions.length > 0 ? c.idleActions[0].name : 'idle');
-          this._setGif(grabAction);
+          this._setGif(c.withBallAction);
           s.facingDir = cheeseX >= x ? 1 : -1;
           this._applyFacing();
           this._hideGhost();
@@ -1740,6 +1749,12 @@
     var distX = Math.abs(diffX) || 0.0001;
     var idle  = distX < c.idleDist;
 
+    // While carrying or pushing the ball, the real "holding" pose takes over
+    // from whatever hover/idle/walk animation would normally play — there's
+    // only one holding animation in the asset pack, so it's used regardless
+    // of movement state.
+    var heldGif = s.heldBallName ? c.withBallAction : null;
+
     // Face the direction of travel
     if (Math.abs(diffX) > 0.5) {
       s.facingDir = diffX < 0 ? -1 : 1;
@@ -1757,7 +1772,7 @@
       /* ── Hover state ── */
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
       if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
-      this._setGif(c.hoverAction);
+      this._setGif(heldGif || c.hoverAction);
       this._applyFacing();
       this._showBubble(true);
       this._hideGhost();
@@ -1788,7 +1803,7 @@
           if (ts > s.idleCooldownUntil && ts > s.idleActionUntil) {
             this._pickIdleAction(ts);
           }
-          this._setGif(s.idleAction);
+          this._setGif(heldGif || s.idleAction);
           this._applyFacing();
           this._hideGhost();
         }
@@ -1854,7 +1869,7 @@
         s.idleActionUntil   = 0;
         s.idleCooldownUntil = 0;
 
-        this._setGif(s.movementAction);
+        this._setGif(heldGif || s.movementAction);
         this._applyTransforms(wobbleRot);
       }
     }
@@ -1903,10 +1918,11 @@
     // height reads better than up by the ears.
     CARRY_HEIGHT_FRAC: 0.68,
     // Per-tick chance a pet standing next to a free, un-thrown ball actually
-    // bothers to pick it up — mostly they just loiter near it. Once the ball
-    // has been freshly thrown by the user, pickup becomes a near-certainty
-    // instead (see ft_isHot in the follow-target navigation).
-    PICKUP_CHANCE_COLD: 0.01,
+    // bothers to pick it up — mostly they just loiter near it, and they'll
+    // cycle through several approach-and-wait attempts before it clicks.
+    // Once the ball has been freshly thrown by the user, pickup becomes a
+    // near-certainty instead (see ft_isHot in the follow-target navigation).
+    PICKUP_CHANCE_COLD: 0.02,
   };
 
   /* ── WebBall variants catalog ───────────────────────────────────────── */
