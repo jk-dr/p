@@ -1632,8 +1632,12 @@
             }
           }
         } else if (!ft_carrier && (!s.ballCooldownUntil || ts >= s.ballCooldownUntil)) {
-          // Free and unheld — grab it.
-          this._grabBall(followTarget, ts);
+          // Free and unheld — mostly just loiter near it, unless it was just
+          // thrown by the user, in which case pouncing on it is a sure thing.
+          var pickupChance = ft_isHot ? 1 : BALL_CARRY.PICKUP_CHANCE_COLD;
+          if (Math.random() < pickupChance) {
+            this._grabBall(followTarget, ts);
+          }
         }
 
         if (s.heldBallName === followTarget.name) {
@@ -1897,7 +1901,12 @@
     // How far down from the top of the pet's sprite the carried ball sits
     // (0 = right at the top of its head, 1 = down at its feet). Mouth/chest
     // height reads better than up by the ears.
-    CARRY_HEIGHT_FRAC: 0.42,
+    CARRY_HEIGHT_FRAC: 0.68,
+    // Per-tick chance a pet standing next to a free, un-thrown ball actually
+    // bothers to pick it up — mostly they just loiter near it. Once the ball
+    // has been freshly thrown by the user, pickup becomes a near-certainty
+    // instead (see ft_isHot in the follow-target navigation).
+    PICKUP_CHANCE_COLD: 0.01,
   };
 
   /* ── WebBall variants catalog ───────────────────────────────────────── */
