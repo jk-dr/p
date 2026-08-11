@@ -1749,12 +1749,6 @@
     var distX = Math.abs(diffX) || 0.0001;
     var idle  = distX < c.idleDist;
 
-    // While carrying or pushing the ball, the real "holding" pose takes over
-    // from whatever hover/idle/walk animation would normally play — there's
-    // only one holding animation in the asset pack, so it's used regardless
-    // of movement state.
-    var heldGif = s.heldBallName ? c.withBallAction : null;
-
     // Face the direction of travel
     if (Math.abs(diffX) > 0.5) {
       s.facingDir = diffX < 0 ? -1 : 1;
@@ -1772,7 +1766,7 @@
       /* ── Hover state ── */
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
       if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
-      this._setGif(heldGif || c.hoverAction);
+      this._setGif(c.hoverAction);
       this._applyFacing();
       this._showBubble(true);
       this._hideGhost();
@@ -1803,7 +1797,7 @@
           if (ts > s.idleCooldownUntil && ts > s.idleActionUntil) {
             this._pickIdleAction(ts);
           }
-          this._setGif(heldGif || s.idleAction);
+          this._setGif(s.idleAction);
           this._applyFacing();
           this._hideGhost();
         }
@@ -1869,7 +1863,7 @@
         s.idleActionUntil   = 0;
         s.idleCooldownUntil = 0;
 
-        this._setGif(heldGif || s.movementAction);
+        this._setGif(s.movementAction);
         this._applyTransforms(wobbleRot);
       }
     }
