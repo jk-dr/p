@@ -1894,6 +1894,10 @@
     // Movement speed multipliers applied while free-roaming with the ball in tow.
     PUSH_SPEED_MULT: 0.55,
     CARRY_SPEED_MULT: 0.85,
+    // How far down from the top of the pet's sprite the carried ball sits
+    // (0 = right at the top of its head, 1 = down at its feet). Mouth/chest
+    // height reads better than up by the ears.
+    CARRY_HEIGHT_FRAC: 0.42,
   };
 
   /* ── WebBall variants catalog ───────────────────────────────────────── */
@@ -2174,7 +2178,7 @@
         } else {
           // Carried aloft, tucked near the pet's front/"hands".
           left = hRect.left + hRect.width / 2 - bw / 2 + facing * hRect.width * 0.28;
-          top  = hRect.top + hRect.height * 0.12 - bh / 2;
+          top  = hRect.top + hRect.height * BALL_CARRY.CARRY_HEIGHT_FRAC - bh / 2;
         }
         s.airX = left;
         s.airY = top;
