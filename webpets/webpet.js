@@ -1,4 +1,4 @@
-/**!
+/**! chode
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -435,6 +435,12 @@
       noIdle:      options.noIdle != null ? !!options.noIdle : (spec.noIdle ? true : false),
     };
 
+    // Weight approximates how big/heavy this pet is, derived from its species
+    // size (fearSize doubles as a size proxy) and scaled by its render size.
+    // Heavier pets can lift and hold onto the web ball for longer; pets below
+    // BALL_CARRY.MIN_WEIGHT_TO_CARRY can't lift it at all and only push it.
+    this._cfg.weight = this._cfg.fearSize * (this._cfg.scale / 0.5);
+
     this.name = entityName;
 
     // 50/50 chance to spawn on the right side of the screen
@@ -481,6 +487,16 @@
       // Timestamp (ms) when the chased ball's speed first dropped below the threshold;
       // null means the ball is still moving fast enough to hold interest.
       ballLostInterestAt:     null,
+      // ── Ball carrying/pushing ──
+      // Name of the WebBall currently held (carried or pushed) by this pet, or null.
+      heldBallName:           null,
+      // 'carry' (lifted, follows aloft) or 'push' (shoved along the ground), or null.
+      holdMode:                null,
+      // Timestamp (ms) after which this pet will get tired and drop what it's holding.
+      holdUntil:               0,
+      // Cooldown (ms) before this pet is allowed to grab/steal a ball again after
+      // dropping or losing one — stops instant re-grab flicker.
+      ballCooldownUntil:       0,
     };
 
     this._mouseX = window.innerWidth  / 2;
@@ -811,6 +827,9 @@
     var rect = this._wrapEl.getBoundingClientRect();
     var s    = this._state;
 
+    // Being picked up by the user — drop whatever ball we're holding.
+    this._dropBall(performance.now());
+
     s.isDragged     = true;
     s.isFalling     = false;
     s.velY          = 0;
@@ -1120,6 +1139,65 @@
     this._state.movementTargetX = Math.min(maxX, Math.max(margin, x + dir * dist));
   };
 
+  /* ── Web ball carrying / pushing / stealing ─────────────────────────── */
+
+  /**
+   * Drop whatever WebBall this pet is currently holding (carrying or
+   * pushing), if any. Sets a brief cooldown so the pet doesn't instantly
+   * re-grab it, and releases the ball back to normal physics — with a little
+   * momentum if it was being carried aloft (a push just settles back onto
+   * the ground it was already touching).
+   */
+  WebPet.prototype._dropBall = function (ts) {
+    var s = this._state;
+    if (!s.heldBallName) return;
+    var ball = _resolveEntity(s.heldBallName);
+    if (ball && ball instanceof WebBall && ball._state.carrierName === this.name) {
+      var wasCarried = ball._state.carryMode === 'carry';
+      ball._state.carrierName = null;
+      ball._state.carryMode   = null;
+      ball._state.isFalling   = true;
+      if (wasCarried) {
+        ball._state.velX = (s.facingDir || 1) * (1 + Math.random() * 2.5);
+        ball._state.velY = -1 - Math.random() * 2; // small hop as it tumbles free
+      } else {
+        ball._state.velX = 0;
+        ball._state.velY = 0;
+      }
+    }
+    s.heldBallName      = null;
+    s.holdMode           = null;
+    s.holdUntil           = 0;
+    s.ballCooldownUntil = ts + BALL_CARRY.STEAL_COOLDOWN_MS;
+  };
+
+  /**
+   * Pick up a free WebBall. Whether the pet can lift it (carry) or can only
+   * shove it along the ground (push) depends on this pet's weight versus
+   * BALL_CARRY.MIN_WEIGHT_TO_CARRY. Heavier pets also hold on for longer
+   * before tiring and dropping it.
+   */
+  WebPet.prototype._grabBall = function (ball, ts) {
+    var s = this._state;
+    var c = this._cfg;
+    var mode = c.weight >= BALL_CARRY.MIN_WEIGHT_TO_CARRY ? 'carry' : 'push';
+
+    ball._state.carrierName = this.name;
+    ball._state.carryMode   = mode;
+    ball._state.isFalling   = false;
+    ball._state.isDragged   = false;
+    ball._state.velX        = 0;
+    ball._state.velY        = 0;
+
+    s.heldBallName = ball.name;
+    s.holdMode      = mode;
+    var holdSpan = BALL_CARRY.HOLD_BASE_MS
+      + c.weight * BALL_CARRY.HOLD_PER_WEIGHT_MS
+      + Math.random() * BALL_CARRY.HOLD_JITTER_MS;
+    s.holdUntil          = ts + holdSpan;
+    s.ballCooldownUntil = 0;
+  };
+
   WebPet.prototype._tick = function (ts) {
     var STEP_MS = 125; // ~8fps logic steps
 
@@ -1206,6 +1284,13 @@
     }
     s.lastStepTime = ts;
 
+    // ── Carrying/pushing the web ball: check for tiring out or fumbling ──
+    if (s.heldBallName) {
+      if (ts >= s.holdUntil || Math.random() < BALL_CARRY.DROP_CHANCE_PER_TICK) {
+        this._dropBall(ts);
+      }
+    }
+
     var spriteW = c.spriteW * c.scale;
 
     var WRAP_MARGIN = spriteW * 1.5;
@@ -1234,6 +1319,8 @@
           s.fleeUntil      = 0;
           s.fearCooldownUntil = 0;
         } else {
+          // Startled — drop whatever we're carrying/pushing before bolting.
+          this._dropBall(ts);
           // Pick or refresh a flee target.
           // Only recalculate once the PREVIOUS flee target is fully reached,
           // not just "close" — this stops the rat yo-yoing back to cheese.
@@ -1349,6 +1436,8 @@
         if (c.lazy && Math.random() < 0.70) {
           // shrug
         } else {
+          // Startled by a bigger animal — drop whatever we're carrying/pushing.
+          this._dropBall(ts);
           var peerNeedsNewFlee = s.peerFleeTargetX === null || ts >= s.peerFleeUntil;
 
           if (peerNeedsNewFlee) {
@@ -1458,12 +1547,20 @@
       followTarget = c.followEntity ? _resolveEntity(c.followEntity) : null;
     }
 
+    // If this pet is already the one carrying/pushing the resolved target, there's
+    // nothing to chase — it just free-roams as normal and the ball tags along
+    // (WebBall's own tick tracks its holder's position directly).
+    if (followTarget && followTarget instanceof WebBall && s.heldBallName === followTarget.name) {
+      followTarget = null;
+    }
+
     // If the follow target is a WebBall that has nearly stopped, start a countdown
     // before losing interest. Duration scales with distraction: focused pets stay
     // longer (up to ~15 s), scatterbrained pets wander off sooner (~2 s).
     // Exception: if this ball specifically attracts this animal (e.g. cheese → rat),
     // the pet is ALWAYS interested when the cheese is grounded — they'll nibble on it.
-    // The countdown resets whenever the ball starts moving again.
+    // The countdown resets whenever the ball starts moving again, and also whenever
+    // a pet — this one or a rival — is actively carrying/pushing it around.
     if (followTarget && followTarget instanceof WebBall) {
       var bs = followTarget._state;
       var ballSpeed = Math.sqrt(bs.velX * bs.velX + bs.velY * bs.velY);
@@ -1472,9 +1569,9 @@
       var isAttractedTarget = followTarget._cfg.attractsAnimals.indexOf(c.animal) !== -1;
       // Less-distracted pets stay focused for longer. distraction=0 → 15 s, distraction=0.08+ → 2 s.
       var BALL_LOSE_INTEREST_MS = 2000 + (1 - Math.min(c.distraction, 0.08) / 0.08) * 13000;
-      if (bs.isDragged || ballSpeed >= BALL_INTEREST_THRESHOLD) {
-        // Ball is moving (or being held) — reset the countdown.
-        // Also clear the nibble-distraction lock so the rat can react (flee/chase) normally.
+      if (bs.isDragged || bs.carrierName || ballSpeed >= BALL_INTEREST_THRESHOLD) {
+        // Ball is moving, held by the user, or being carried/pushed by a pet —
+        // reset the countdown so the chase (or the tug-of-war) stays alive.
         s.ballLostInterestAt = null;
         if (isAttractedTarget && s.distractionUntil > ts + 5000) {
           s.distractionUntil = 0; // unlock from nibble suppression
@@ -1510,25 +1607,52 @@
       var ft_speed  = Math.sqrt(ft_bs.velX * ft_bs.velX + ft_bs.velY * ft_bs.velY);
       var ft_grounded   = !ft_bs.isDragged && ft_speed < 1.5;
       var ft_attracted  = followTarget._cfg.attractsAnimals.indexOf(c.animal) !== -1;
-      var NIBBLE_DIST   = 12; // px — must be this close to start nibbling
+      var ft_carrier    = ft_bs.carrierName ? _resolveEntity(ft_bs.carrierName) : null;
+
+      // A ball the user just threw is irresistible for a few seconds — pets
+      // close the distance faster and grab for it the moment they're near.
+      var ft_isHot = (ts - (ft_bs.thrownAt || 0)) < BALL_CARRY.THROWN_INTEREST_MS;
+      var pickupDist = ft_isHot ? BALL_CARRY.PICKUP_DIST_HOT : BALL_CARRY.PICKUP_DIST;
+      var chaseSpeedMult = ft_isHot ? BALL_CARRY.HOT_SPEED_MULT : 1;
 
       var distToCheese = Math.abs(cheeseX - x);
 
-      // ── Nibble: right on top of a grounded attracted object ──
-      if (ft_grounded && ft_attracted && distToCheese < NIBBLE_DIST) {
-        if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
-        if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
-        var nibbleAction = c.hoverAction || (c.idleActions.length > 0 ? c.idleActions[0].name : 'idle');
-        this._setGif(nibbleAction);
-        s.facingDir = cheeseX >= x ? 1 : -1;
-        this._applyFacing();
-        this._hideGhost();
-        // Hold the nibble lock so distraction can't interrupt mid-nibble
-        s.distractionUntil = ts + 9999999;
-        this._wrapEl.style.left = (x - spriteW / 2) + 'px';
-        this._syncGhost(x, x - spriteW / 2, parentW);
-        this._rafId = requestAnimationFrame(this._tick);
-        return;
+      // ── Close enough to grab it, or to try wrestling it away from a rival ──
+      if (ft_grounded && distToCheese < pickupDist) {
+        if (ft_carrier && ft_carrier !== this) {
+          // Someone else already has it — attempt a steal.
+          if (!s.ballCooldownUntil || ts >= s.ballCooldownUntil) {
+            var stealChance = BALL_CARRY.STEAL_CHANCE_PER_TICK
+              + (c.weight - ft_carrier._cfg.weight) * 0.01
+              + (ft_isHot ? 0.03 : 0);
+            stealChance = Math.max(0.005, Math.min(0.1, stealChance));
+            if (Math.random() < stealChance) {
+              ft_carrier._dropBall(ts);
+              this._grabBall(followTarget, ts);
+            }
+          }
+        } else if (!ft_carrier && (!s.ballCooldownUntil || ts >= s.ballCooldownUntil)) {
+          // Free and unheld — grab it.
+          this._grabBall(followTarget, ts);
+        }
+
+        if (s.heldBallName === followTarget.name) {
+          // Just grabbed (or already hold) it this tick — strike a little
+          // "got it!" pose; next tick falls through to free-roam-with-ball.
+          if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
+          if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
+          var grabAction = c.hoverAction || (c.idleActions.length > 0 ? c.idleActions[0].name : 'idle');
+          this._setGif(grabAction);
+          s.facingDir = cheeseX >= x ? 1 : -1;
+          this._applyFacing();
+          this._hideGhost();
+          this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+          this._syncGhost(x, x - spriteW / 2, parentW);
+          this._rafId = requestAnimationFrame(this._tick);
+          return;
+        }
+        // Steal failed / on cooldown / couldn't grab this tick — fall through
+        // and keep closing the distance below.
       }
 
       // ── Distraction: temporarily wander somewhere else ──
@@ -1559,7 +1683,7 @@
 
       // Only move if we're not already right on top of the destination
       if (ft_distX > 1) {
-        x += (ft_diffX / ft_distX) * c.speed * s.movementSpeedMult;
+        x += (ft_diffX / ft_distX) * c.speed * s.movementSpeedMult * chaseSpeedMult;
 
         // Edge wrapping
         if (x < -WRAP_MARGIN) {
@@ -1679,7 +1803,9 @@
           this._pickMovementTarget(x, parentW);
         }
 
-        x += (diffX / distX) * c.speed * s.movementSpeedMult;
+        var carryMult = s.holdMode === 'push' ? BALL_CARRY.PUSH_SPEED_MULT
+                      : (s.holdMode === 'carry' ? BALL_CARRY.CARRY_SPEED_MULT : 1);
+        x += (diffX / distX) * c.speed * s.movementSpeedMult * carryMult;
 
         // Edge wrapping
         if (x < -WRAP_MARGIN) {
@@ -1733,6 +1859,41 @@
     // Keep ghost in sync for seamless edge wrapping
     this._syncGhost(x, x - spriteW / 2, parentW);
     this._rafId = requestAnimationFrame(this._tick);
+  };
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     Ball carrying / pushing / stealing tuning
+  ───────────────────────────────────────────────────────────────────────── */
+  var BALL_CARRY = {
+    // A pet needs at least this much weight (see WebPet _cfg.weight, derived
+    // from species size) to lift the ball off the ground. Lighter pets can
+    // still interact with it, but only by pushing it along the floor.
+    MIN_WEIGHT_TO_CARRY: 3,
+    // How close a pet must get to attempt a grab or a steal.
+    PICKUP_DIST: 16,
+    // Wider, more eager grab radius for a few seconds after the user throws it.
+    PICKUP_DIST_HOT: 34,
+    // Base + per-weight-point hold duration before a carrying/pushing pet
+    // tires out and drops it — heavier pets hang on considerably longer.
+    HOLD_BASE_MS: 2200,
+    HOLD_PER_WEIGHT_MS: 850,
+    HOLD_JITTER_MS: 2000,
+    // Small chance each tick that a holder fumbles and drops it early,
+    // regardless of how long they've been holding it.
+    DROP_CHANCE_PER_TICK: 0.0035,
+    // Chance per tick that a rival within pickup range successfully wrestles
+    // the ball away from the current holder (nudged by the weight difference).
+    STEAL_CHANCE_PER_TICK: 0.02,
+    // Cooldown before a pet that just dropped or lost the ball can grab/steal
+    // again — stops instant re-grab flicker and tug-of-war spam.
+    STEAL_COOLDOWN_MS: 1600,
+    // How long after a user throw the ball stays "hot" — pets close in faster
+    // and grab it on sight instead of hesitating.
+    THROWN_INTEREST_MS: 4000,
+    HOT_SPEED_MULT: 1.4,
+    // Movement speed multipliers applied while free-roaming with the ball in tow.
+    PUSH_SPEED_MULT: 0.55,
+    CARRY_SPEED_MULT: 0.85,
   };
 
   /* ── WebBall variants catalog ───────────────────────────────────────── */
@@ -1807,6 +1968,14 @@
       dragOffsetY: 0,
       rotation:    0,
       angularVel:  0,
+      // ── Held by a pet ──
+      // Name of the WebPet currently carrying/pushing this ball, or null.
+      carrierName: null,
+      // 'carry' or 'push' — mirrors the holder's WebPet._state.holdMode.
+      carryMode:   null,
+      // Timestamp (ms) of the last time the user threw this ball with real
+      // force — used to spike nearby pets' interest for a few seconds.
+      thrownAt:    0,
     };
 
     this._mouseVX        = null;
@@ -1982,6 +2151,43 @@
     var s = this._state;
     var c = this._cfg;
 
+    // ── Carried or pushed by a pet — position tracks the holder directly,
+    //    skipping normal physics entirely while the hold is valid. ──
+    if (s.carrierName && !s.isDragged) {
+      var holder = _resolveEntity(s.carrierName);
+      var stillHeld = holder && (holder instanceof WebPet) && holder._state.heldBallName === this.name;
+      if (!stillHeld) {
+        // Holder is gone, destroyed, or no longer claims this ball — let it fall.
+        s.carrierName = null;
+        s.carryMode   = null;
+        s.isFalling   = true;
+      } else {
+        var hRect  = holder._wrapEl.getBoundingClientRect();
+        var bw     = c.spriteW * c.scale;
+        var bh     = c.spriteH * c.scale;
+        var facing = holder._state.facingDir || 1;
+        var left, top;
+        if (s.carryMode === 'push') {
+          // Pushed along the ground, just ahead of the pet in its facing direction.
+          left = hRect.left + hRect.width / 2 - bw / 2 + facing * hRect.width * 0.55;
+          top  = hRect.bottom - bh;
+        } else {
+          // Carried aloft, tucked near the pet's front/"hands".
+          left = hRect.left + hRect.width / 2 - bw / 2 + facing * hRect.width * 0.28;
+          top  = hRect.top + hRect.height * 0.12 - bh / 2;
+        }
+        s.airX = left;
+        s.airY = top;
+        s.velX = 0;
+        s.velY = 0;
+        this._wrapEl.style.left = left + 'px';
+        this._wrapEl.style.top  = top  + 'px';
+        this._imgEl.style.transform = 'rotate(' + s.rotation.toFixed(2) + 'deg)';
+        this._rafId = requestAnimationFrame(this._tick);
+        return;
+      }
+    }
+
     try {
       if (s.isDragged) {
         this._rafId = requestAnimationFrame(this._tick);
@@ -2076,6 +2282,19 @@
     var rect = this._wrapEl.getBoundingClientRect();
     var s    = this._state;
 
+    // If a pet is currently carrying/pushing this ball, the user grabbing it
+    // yanks it right out of their hold.
+    if (s.carrierName) {
+      var _prevCarrier = _resolveEntity(s.carrierName);
+      if (_prevCarrier && _prevCarrier instanceof WebPet) {
+        _prevCarrier._state.heldBallName    = null;
+        _prevCarrier._state.holdMode         = null;
+        _prevCarrier._state.ballCooldownUntil = performance.now() + BALL_CARRY.STEAL_COOLDOWN_MS;
+      }
+      s.carrierName = null;
+      s.carryMode   = null;
+    }
+
     s.isDragged    = true;
     s.velX         = 0;
     s.velY         = 0;
@@ -2153,6 +2372,13 @@
     s.isFalling = true;
     s.velX = Math.max(-MAX_V, Math.min(velPxMsX * SCALE, MAX_V));
     s.velY = Math.max(-MAX_V, Math.min(velPxMsY * SCALE, MAX_V));
+
+    // A real throw (as opposed to just letting go while barely moving) spikes
+    // nearby pets' interest in chasing it down and grabbing it.
+    var THROW_SPEED_THRESHOLD = 6; // px/frame, post-scaling
+    if (Math.hypot(s.velX, s.velY) >= THROW_SPEED_THRESHOLD) {
+      s.thrownAt = performance.now();
+    }
 
     this._mouseVX = null;
     this._mouseVY = null;
