@@ -1668,6 +1668,27 @@
         // and keep closing the distance below.
       }
 
+      // ── Close but can't grab yet (still bouncing, on cooldown, etc.) —
+      //    hold position and watch it instead of sprinting into its exact
+      //    pixel spot every tick, which is what caused the constant
+      //    direction-flipping right after a throw. The grab check above still
+      //    runs first every tick, so the instant it becomes grabbable this
+      //    pet pounces immediately — this only pauses the chase, not the
+      //    interest. ──
+      var approachIdleDist = ft_isHot ? BALL_CARRY.APPROACH_IDLE_DIST_HOT : BALL_CARRY.APPROACH_IDLE_DIST;
+      if (!ft_carrier && distToCheese < approachIdleDist) {
+        if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
+        if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
+        this._setGif(c.idleActions.length > 0 ? c.idleActions[0].name : 'idle');
+        s.facingDir = cheeseX >= x ? 1 : -1;
+        this._applyFacing();
+        this._hideGhost();
+        this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+        this._syncGhost(x, x - spriteW / 2, parentW);
+        this._rafId = requestAnimationFrame(this._tick);
+        return;
+      }
+
       // ── Distraction: temporarily wander somewhere else ──
       // Kick off a new distraction randomly while moving (not while nibbling).
       if (c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction) {
@@ -1762,7 +1783,7 @@
     var isFearingCursor = c.fearCursor && this._hasRealPointer &&
                           Math.hypot(this._mouseX - cx, this._mouseY - cy) < (c.lazy ? 60 : 180);
 
-    if (this._hasRealPointer && distToMouse <= c.hoverDist && !isFearingCursor) {
+    if (this._hasRealPointer && distToMouse <= c.hoverDist && !isFearingCursor && !s.heldBallName) {
       /* ── Hover state ── */
       if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
       if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
@@ -1886,6 +1907,14 @@
     PICKUP_DIST: 16,
     // Wider, more eager grab radius for a few seconds after the user throws it.
     PICKUP_DIST_HOT: 34,
+    // Once a pet is this close, it stops sprinting toward the ball's exact
+    // pixel position and just holds still, facing it, until a grab attempt
+    // actually succeeds (e.g. the ball is still bouncing/rolling and not
+    // "grounded" yet). Without this buffer a fast, eager pet keeps overrunning
+    // a moving target and flipping direction every tick trying to correct.
+    // Must stay larger than the matching PICKUP_DIST above.
+    APPROACH_IDLE_DIST: 24,
+    APPROACH_IDLE_DIST_HOT: 55,
     // Base + per-weight-point hold duration before a carrying/pushing pet
     // tires out and drops it — heavier pets hang on considerably longer.
     HOLD_BASE_MS: 2200,
