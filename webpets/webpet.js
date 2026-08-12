@@ -1647,16 +1647,25 @@
       var ft_carrier    = ft_bs.carrierName ? _resolveEntity(ft_bs.carrierName) : null;
 
       // A ball the user just threw is irresistible for a few seconds — pets
-      // close the distance faster and grab for it the moment they're near.
+      // close the distance faster and grab for it the moment they're near
+      // (but only once it's back down near the ground — see ft_nearGround
+      // below; a ball still sailing through the air can't be snatched).
       var ft_isHot = (ts - (ft_bs.thrownAt || 0)) < BALL_CARRY.THROWN_INTEREST_MS;
       var pickupDist = ft_isHot ? BALL_CARRY.PICKUP_DIST_HOT : BALL_CARRY.PICKUP_DIST;
       var chaseSpeedMult = ft_isHot ? BALL_CARRY.HOT_SPEED_MULT : 1;
 
       var distToCheese = Math.abs(cheeseX - x);
 
-      // A freshly-thrown ball is snatched out of the air/off a bounce almost
-      // immediately — no need to wait for it to come fully to rest first.
-      var ft_canGrab = ft_isHot ? true : ft_grounded;
+      // FIX: a "hot" ball used to be grabbable purely based on recency of the
+      // throw, regardless of how high up it still was — so a pet standing
+      // right underneath a ball at the top of its arc could snatch it clean
+      // out of mid-air. Require it to also be near the ground (floor-level
+      // bounce/roll) before a hot ball can be grabbed; a fully-grounded ball
+      // (ft_grounded) can always be grabbed as before.
+      var ft_floorY       = window.innerHeight - (followTarget._cfg.spriteH * followTarget._cfg.scale);
+      var ft_heightAboveFloor = Math.max(0, ft_floorY - ft_bs.airY);
+      var ft_nearGround   = ft_heightAboveFloor <= BALL_CARRY.GRAB_MAX_HEIGHT;
+      var ft_canGrab       = ft_grounded || (ft_isHot && ft_nearGround);
 
       // ── Close enough to grab it, or to try wrestling it away from a rival ──
       if (ft_canGrab && distToCheese < pickupDist) {
@@ -1708,7 +1717,8 @@
       //    interest.
       //    Hot (freshly-thrown) balls skip this entirely — an eager pet just
       //    keeps closing the distance at full speed rather than pausing to
-      //    "watch and wait", since ft_canGrab already lets it grab in-flight. ──
+      //    "watch and wait", since ft_canGrab already lets it grab in-flight
+      //    once it's near the ground. ──
       var approachIdleDist = ft_isHot ? BALL_CARRY.APPROACH_IDLE_DIST_HOT : BALL_CARRY.APPROACH_IDLE_DIST;
       if (!ft_isHot && !ft_carrier && distToCheese < approachIdleDist) {
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
@@ -2006,6 +2016,12 @@
     // (Skipped entirely for hot/freshly-thrown balls — see ft_isHot usage.)
     APPROACH_IDLE_DIST: 24,
     APPROACH_IDLE_DIST_HOT: 55,
+    // FIX: how high above the floor (px) a ball is still allowed to be
+    // grabbed while "hot". Keeps pets from snatching a freshly-thrown ball
+    // out of mid-air — they now have to wait for it to come back down near
+    // ground level (still fine to grab it off a bounce/roll, just not while
+    // it's sailing through the air).
+    GRAB_MAX_HEIGHT: 40,
     // Base + per-weight-point hold duration before a carrying/pushing pet
     // tires out and drops it — heavier pets hang on considerably longer.
     HOLD_BASE_MS: 2200,
@@ -2526,7 +2542,13 @@
 
     // A real throw (as opposed to just letting go while barely moving) spikes
     // nearby pets' interest in chasing it down and grabbing it.
-    var THROW_SPEED_THRESHOLD = 6; // px/frame, post-scaling
+    // FIX: was 6, which is high enough (after the 20x pointer-velocity scale
+    // above) that a gentle, deliberate toss often landed under it — the ball
+    // was then treated as merely "dropped" (2% cold pickup chance per tick,
+    // short interest window) instead of a throw pets reliably chase down and
+    // return. Lowered so light throws still register; a ball that's truly
+    // just set down (near-zero release velocity) still stays cold.
+    var THROW_SPEED_THRESHOLD = 1.5; // px/frame, post-scaling
     if (Math.hypot(s.velX, s.velY) >= THROW_SPEED_THRESHOLD) {
       s.thrownAt = performance.now();
     }
