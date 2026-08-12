@@ -1198,6 +1198,12 @@
     var holdSpan = BALL_CARRY.HOLD_BASE_MS
       + c.weight * BALL_CARRY.HOLD_PER_WEIGHT_MS
       + Math.random() * BALL_CARRY.HOLD_JITTER_MS;
+    // Pets that instinctively fetch (chasesObjects, e.g. foxes/dogs) get a
+    // guaranteed minimum hold so they have time to actually run the ball
+    // back to the user instead of tiring out mid-return.
+    if (c.chasesObjects) {
+      holdSpan = Math.max(holdSpan, BALL_CARRY.FETCH_HOLD_MIN_MS);
+    }
     s.holdUntil          = ts + holdSpan;
     s.ballCooldownUntil = 0;
   };
@@ -1565,17 +1571,38 @@
     // the pet is ALWAYS interested when the cheese is grounded — they'll nibble on it.
     // The countdown resets whenever the ball starts moving again, and also whenever
     // a pet — this one or a rival — is actively carrying/pushing it around.
+    //
+    // Special case: if a PEER is already carrying/pushing the ball, the rest of
+    // the yard shouldn't stay fixated on it forever — they lose interest much
+    // faster than they would for a merely-still ball, so only the odd rival
+    // keeps contesting it instead of the whole group mobbing the carrier.
     if (followTarget && followTarget instanceof WebBall) {
       var bs = followTarget._state;
       var ballSpeed = Math.sqrt(bs.velX * bs.velX + bs.velY * bs.velY);
       var BALL_INTEREST_THRESHOLD = 1.5; // px/frame — below this the ball is "at rest"
       // Cheese (and other attracted-object) targets: never lose interest while grounded.
       var isAttractedTarget = followTarget._cfg.attractsAnimals.indexOf(c.animal) !== -1;
+      // By this point in the tick, if THIS pet were the carrier, followTarget
+      // would already have been nulled out above — so any carrierName here
+      // always belongs to some OTHER pet.
+      var heldByPeer = !!bs.carrierName;
       // Less-distracted pets stay focused for longer. distraction=0 → 15 s, distraction=0.08+ → 2 s.
       var BALL_LOSE_INTEREST_MS = 2000 + (1 - Math.min(c.distraction, 0.08) / 0.08) * 13000;
-      if (bs.isDragged || bs.carrierName || ballSpeed >= BALL_INTEREST_THRESHOLD) {
-        // Ball is moving, held by the user, or being carried/pushed by a pet —
-        // reset the countdown so the chase (or the tug-of-war) stays alive.
+
+      if (heldByPeer && !isAttractedTarget) {
+        // Someone else already has it — decay interest quickly instead of
+        // resetting the countdown, so onlookers peel off and stop crowding
+        // the carrier.
+        if (s.ballLostInterestAt === null) {
+          s.ballLostInterestAt = ts;
+        } else if (ts - s.ballLostInterestAt >= BALL_CARRY.PEER_HELD_LOSE_INTEREST_MS) {
+          if (c.followEntity === followTarget.name) c.followEntity = null;
+          followTarget = null;
+          s.ballLostInterestAt = null;
+        }
+      } else if (bs.isDragged || heldByPeer || ballSpeed >= BALL_INTEREST_THRESHOLD) {
+        // Ball is moving, held by the user, or (for attracted targets only)
+        // held by a peer — reset the countdown so the chase/tug-of-war stays alive.
         s.ballLostInterestAt = null;
         if (isAttractedTarget && s.distractionUntil > ts + 5000) {
           s.distractionUntil = 0; // unlock from nibble suppression
@@ -1627,8 +1654,12 @@
 
       var distToCheese = Math.abs(cheeseX - x);
 
+      // A freshly-thrown ball is snatched out of the air/off a bounce almost
+      // immediately — no need to wait for it to come fully to rest first.
+      var ft_canGrab = ft_isHot ? true : ft_grounded;
+
       // ── Close enough to grab it, or to try wrestling it away from a rival ──
-      if (ft_grounded && distToCheese < pickupDist) {
+      if (ft_canGrab && distToCheese < pickupDist) {
         if (ft_carrier && ft_carrier !== this) {
           // Someone else already has it — attempt a steal.
           if (!s.ballCooldownUntil || ts >= s.ballCooldownUntil) {
@@ -1674,9 +1705,12 @@
       //    direction-flipping right after a throw. The grab check above still
       //    runs first every tick, so the instant it becomes grabbable this
       //    pet pounces immediately — this only pauses the chase, not the
-      //    interest. ──
+      //    interest.
+      //    Hot (freshly-thrown) balls skip this entirely — an eager pet just
+      //    keeps closing the distance at full speed rather than pausing to
+      //    "watch and wait", since ft_canGrab already lets it grab in-flight. ──
       var approachIdleDist = ft_isHot ? BALL_CARRY.APPROACH_IDLE_DIST_HOT : BALL_CARRY.APPROACH_IDLE_DIST;
-      if (!ft_carrier && distToCheese < approachIdleDist) {
+      if (!ft_isHot && !ft_carrier && distToCheese < approachIdleDist) {
         if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
         if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
         this._setGif(c.idleActions.length > 0 ? c.idleActions[0].name : 'idle');
@@ -1744,6 +1778,62 @@
       this._setGif(s.movementAction);
       this._applyTransforms(ft_wobbleRot);
       this._showBubble(false);
+      this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+      this._syncGhost(x, x - spriteW / 2, parentW);
+      this._rafId = requestAnimationFrame(this._tick);
+      return;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       FETCH RETURN NAVIGATION
+       Pets with an instinctive interest in objects (chasesObjects — foxes,
+       dogs) don't just wander off once they've grabbed the ball: they carry
+       it back toward the user's cursor and drop it there so it's ready to
+       be picked up and thrown again. Nothing to do with the followTarget
+       machinery above, since at this point the pet already holds its own
+       ball (followTarget was nulled out earlier this tick).
+    ════════════════════════════════════════════════════════════════════════ */
+    if (c.chasesObjects && s.heldBallName && this._hasRealPointer) {
+      // this._mouseX is viewport/clientX, which lines up with the same
+      // coordinate space as s.x for position:fixed pets anchored to <body>.
+      var fetchX = this._mouseX;
+      var fetchDiffX = fetchX - x;
+      var fetchDistX = Math.abs(fetchDiffX) || 0.0001;
+      var FETCH_DROP_DIST = 60; // close enough to the user to set it down
+
+      if (Math.abs(fetchDiffX) > 0.5) s.facingDir = fetchDiffX < 0 ? -1 : 1;
+
+      if (fetchDistX <= FETCH_DROP_DIST) {
+        // Made it back — set the ball down right here for the user to grab
+        // and throw again.
+        this._dropBall(ts);
+        if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
+        if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
+        this._setGif(c.idleActions.length > 0 ? c.idleActions[0].name : 'idle');
+        this._applyFacing();
+        this._hideGhost();
+        this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+        this._syncGhost(x, x - spriteW / 2, parentW);
+        this._rafId = requestAnimationFrame(this._tick);
+        return;
+      }
+
+      var fetchCarryMult = s.holdMode === 'push' ? BALL_CARRY.PUSH_SPEED_MULT
+                          : (s.holdMode === 'carry' ? BALL_CARRY.CARRY_SPEED_MULT : 1);
+      x += (fetchDiffX / fetchDistX) * c.speed * s.movementSpeedMult * fetchCarryMult;
+
+      // Edge wrapping — rare on the way to the cursor, but keep it consistent
+      if (x < -WRAP_MARGIN) {
+        x += parentW + WRAP_MARGIN * 2;
+      } else if (x > parentW + WRAP_MARGIN) {
+        x -= parentW + WRAP_MARGIN * 2;
+      }
+      s.x = x;
+
+      this._setGif(c.withBallAction);
+      this._applyFacing();
+      this._showBubble(false);
+      this._hideGhost();
       this._wrapEl.style.left = (x - spriteW / 2) + 'px';
       this._syncGhost(x, x - spriteW / 2, parentW);
       this._rafId = requestAnimationFrame(this._tick);
@@ -1913,6 +2003,7 @@
     // "grounded" yet). Without this buffer a fast, eager pet keeps overrunning
     // a moving target and flipping direction every tick trying to correct.
     // Must stay larger than the matching PICKUP_DIST above.
+    // (Skipped entirely for hot/freshly-thrown balls — see ft_isHot usage.)
     APPROACH_IDLE_DIST: 24,
     APPROACH_IDLE_DIST_HOT: 55,
     // Base + per-weight-point hold duration before a carrying/pushing pet
@@ -1920,6 +2011,10 @@
     HOLD_BASE_MS: 2200,
     HOLD_PER_WEIGHT_MS: 850,
     HOLD_JITTER_MS: 2000,
+    // Guaranteed minimum hold duration for chasesObjects pets (foxes, dogs),
+    // so they have enough time to actually fetch the ball back to the user
+    // instead of tiring out mid-return trip.
+    FETCH_HOLD_MIN_MS: 8000,
     // Small chance each tick that a holder fumbles and drops it early,
     // regardless of how long they've been holding it.
     DROP_CHANCE_PER_TICK: 0.0035,
@@ -1929,6 +2024,10 @@
     // Cooldown before a pet that just dropped or lost the ball can grab/steal
     // again — stops instant re-grab flicker and tug-of-war spam.
     STEAL_COOLDOWN_MS: 1600,
+    // How long, once a peer is already carrying/pushing the ball, before an
+    // onlooker pet gives up trying to reach it. Kept short and separate from
+    // BALL_LOSE_INTEREST_MS so the whole yard doesn't mob whoever's holding it.
+    PEER_HELD_LOSE_INTEREST_MS: 2500,
     // How long after a user throw the ball stays "hot" — pets close in faster
     // and grab it on sight instead of hesitating.
     THROWN_INTEREST_MS: 4000,
