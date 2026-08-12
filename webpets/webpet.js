@@ -1,4 +1,4 @@
-/**!
+/**! bowey is bi
  * webpet.js — Standalone, zero-dependency web pets
  * Drop-in usage:
  *   <script src="/webpet.js" data-animal="fox" data-color="red"></script>
@@ -1624,10 +1624,6 @@
       var ft_isHot = (ts - (ft_bs.thrownAt || 0)) < BALL_CARRY.THROWN_INTEREST_MS;
       var pickupDist = ft_isHot ? BALL_CARRY.PICKUP_DIST_HOT : BALL_CARRY.PICKUP_DIST;
       var chaseSpeedMult = ft_isHot ? BALL_CARRY.HOT_SPEED_MULT : 1;
-      // Once within this range, ease off to a slow creep instead of sprinting
-      // in at full chase speed — avoids overshooting a ball that's still
-      // bouncing/settling and flip-flopping direction trying to correct.
-      var approachIdleDist = ft_isHot ? BALL_CARRY.APPROACH_IDLE_DIST_HOT : BALL_CARRY.APPROACH_IDLE_DIST;
 
       var distToCheese = Math.abs(cheeseX - x);
 
@@ -1672,6 +1668,27 @@
         // and keep closing the distance below.
       }
 
+      // ── Close but can't grab yet (still bouncing, on cooldown, etc.) —
+      //    hold position and watch it instead of sprinting into its exact
+      //    pixel spot every tick, which is what caused the constant
+      //    direction-flipping right after a throw. The grab check above still
+      //    runs first every tick, so the instant it becomes grabbable this
+      //    pet pounces immediately — this only pauses the chase, not the
+      //    interest. ──
+      var approachIdleDist = ft_isHot ? BALL_CARRY.APPROACH_IDLE_DIST_HOT : BALL_CARRY.APPROACH_IDLE_DIST;
+      if (!ft_carrier && distToCheese < approachIdleDist) {
+        if (c.jumpAmp  > 0) { s.jumpPhase  = 0; this._wrapEl.style.bottom = '0px'; }
+        if (c.wobbleDeg > 0) { s.wobblePhase = 0; }
+        this._setGif(c.idleActions.length > 0 ? c.idleActions[0].name : 'idle');
+        s.facingDir = cheeseX >= x ? 1 : -1;
+        this._applyFacing();
+        this._hideGhost();
+        this._wrapEl.style.left = (x - spriteW / 2) + 'px';
+        this._syncGhost(x, x - spriteW / 2, parentW);
+        this._rafId = requestAnimationFrame(this._tick);
+        return;
+      }
+
       // ── Distraction: temporarily wander somewhere else ──
       // Kick off a new distraction randomly while moving (not while nibbling).
       if (c.distraction > 0 && ts >= s.distractionUntil && Math.random() < c.distraction) {
@@ -1700,10 +1717,7 @@
 
       // Only move if we're not already right on top of the destination
       if (ft_distX > 1) {
-        var effChaseMult = (!ft_carrier && distToCheese < approachIdleDist)
-          ? BALL_CARRY.APPROACH_CREEP_MULT
-          : chaseSpeedMult;
-        x += (ft_diffX / ft_distX) * c.speed * s.movementSpeedMult * effChaseMult;
+        x += (ft_diffX / ft_distX) * c.speed * s.movementSpeedMult * chaseSpeedMult;
 
         // Edge wrapping
         if (x < -WRAP_MARGIN) {
@@ -1901,11 +1915,6 @@
     // Must stay larger than the matching PICKUP_DIST above.
     APPROACH_IDLE_DIST: 24,
     APPROACH_IDLE_DIST_HOT: 55,
-    // Movement speed multiplier used inside that buffer zone — a slow,
-    // controlled final approach instead of a full-speed sprint that would
-    // overshoot a settling ball. Always > 0 so the pet keeps inching forward
-    // and never gets permanently stranded just outside grab range.
-    APPROACH_CREEP_MULT: 0.15,
     // Base + per-weight-point hold duration before a carrying/pushing pet
     // tires out and drops it — heavier pets hang on considerably longer.
     HOLD_BASE_MS: 2200,
